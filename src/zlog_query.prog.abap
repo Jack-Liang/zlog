@@ -155,7 +155,11 @@ FORM search_and_display.
   DATA: ls_msg   TYPE bal_s_msg,
         lv_text  TYPE c LENGTH 220,
         lv_incl  TYPE c LENGTH 40,
-        lv_line  TYPE c LENGTH 10.
+        lv_line  TYPE c LENGTH 10,
+        " BAL 按时间倒序返回消息：追溯行(I)先出现，其后跟本体行(E)——
+        " 待回填机制把位置带给本体行，使 E 行也能直接双击跳转
+        lv_pincl TYPE c LENGTH 40,
+        lv_pline TYPE i.
 
   LOOP AT lt_msgh INTO DATA(ls_msgh).
     CLEAR: ls_msg, lv_text, lv_incl, lv_line.
@@ -184,12 +188,22 @@ FORM search_and_display.
         msgty     = ls_msg-msgty
         text      = lv_text ) TO lt_out.
 
+    " 本体行：继承前一条追溯行的位置（配对）
+    IF lv_pincl IS NOT INITIAL
+       AND lt_out[ lines( lt_out ) ]-incl IS INITIAL.
+      lt_out[ lines( lt_out ) ]-incl = lv_pincl.
+      lt_out[ lines( lt_out ) ]-line = lv_pline.
+      CLEAR: lv_pincl, lv_pline.
+    ENDIF.
+
     " 解析追溯行 "at INCL line N"，供双击跳源码
     FIND REGEX 'at ([A-Za-z0-9_/=]+) line ([0-9]+)'
          IN lv_text SUBMATCHES lv_incl lv_line ##REGEX_POSIX.
     IF sy-subrc = 0 AND lv_incl IS NOT INITIAL.
       lt_out[ lines( lt_out ) ]-incl = lv_incl.
       lt_out[ lines( lt_out ) ]-line = lv_line.
+      lv_pincl = lv_incl.              " 等待配对的本体行
+      lv_pline = lv_line.
     ENDIF.
   ENDLOOP.
 
