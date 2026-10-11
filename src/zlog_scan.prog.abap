@@ -30,6 +30,33 @@ TYPES: BEGIN OF ty_hit,
 
 DATA gt_hits TYPE ty_hits.
 
+
+CLASS lcl_events DEFINITION FINAL.
+  PUBLIC SECTION.
+    METHODS on_double_click FOR EVENT double_click OF cl_salv_events_table
+      IMPORTING row column.
+ENDCLASS.
+
+CLASS lcl_events IMPLEMENTATION.
+
+  METHOD on_double_click.
+    READ TABLE gt_hits INTO DATA(ls_hit) INDEX row.
+    IF sy-subrc <> 0 OR ls_hit-include IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'RS_TOOL_ACCESS'
+      EXPORTING
+        operation   = 'SHOW'
+        object_type = 'PROG'
+        object_name = ls_hit-include
+        position    = ls_hit-line
+      EXCEPTIONS
+        OTHERS      = 0.
+  ENDMETHOD.
+
+ENDCLASS.
+
 START-OF-SELECTION.
   PERFORM scan_package USING p_pack.
   PERFORM display.
@@ -151,6 +178,8 @@ FORM display.
         CHANGING  t_table      = gt_hits ).
 
       lo_alv->get_columns( )->set_optimize( abap_true ).
+      DATA(lo_handler) = NEW lcl_events( ).   " 须持有引用，防止被 GC
+      SET HANDLER lo_handler->on_double_click FOR lo_alv->get_event( ).
       lo_alv->display( ).
 
     CATCH cx_root.
