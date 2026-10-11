@@ -37,7 +37,7 @@ START-OF-SELECTION.
 
 FORM scan_package USING iv_pack TYPE devclass.
 
-  DATA: lt_src  TYPE ty_src_t,
+  DATA: lt_src   TYPE ty_src_t,
         lt_tadir TYPE STANDARD TABLE OF tadir,
         lt_fdir  TYPE STANDARD TABLE OF tfdir.
 
@@ -45,6 +45,10 @@ FORM scan_package USING iv_pack TYPE devclass.
     WHERE devclass = iv_pack
       AND object IN ('PROG','FUGR','CLAS').
   SORT lt_tadir BY object obj_name.
+
+  " TFDIR 一次加载、内表 CP 过滤：SQL LIKE 有列长限制（30），
+  " 长组名的 "L<组名>U%" 模式会 dump（SAPSQL_LIKE_PATTERN_TOO_LONG）
+  SELECT * FROM tfdir INTO TABLE lt_fdir.
 
   LOOP AT lt_tadir INTO DATA(ls_tadir).
 
@@ -56,12 +60,10 @@ FORM scan_package USING iv_pack TYPE devclass.
                                   ls_tadir-obj_name lt_src.
 
       WHEN 'FUGR'.
-        " 组内函数 include：L<组名>U<nn>
-        DATA lv_pat TYPE string.        " string 无尾部填充，LIKE 模式安全
-        lv_pat = |L{ ls_tadir-obj_name }U%|.
-        SELECT * FROM tfdir INTO TABLE lt_fdir
-          WHERE include LIKE lv_pat.
-        LOOP AT lt_fdir INTO DATA(ls_fdir).
+        " 组内函数 include：L<组名>U<nn>（CP 匹配，规避 LIKE 长度限制）
+        DATA(lv_cp) = |L{ ls_tadir-obj_name }U*|.
+        LOOP AT lt_fdir INTO DATA(ls_fdir)
+             WHERE include CP lv_cp.
           READ REPORT ls_fdir-include INTO lt_src.
           PERFORM scan_source USING 'FUNC' ls_fdir-funcname
                                     ls_fdir-include lt_src.
