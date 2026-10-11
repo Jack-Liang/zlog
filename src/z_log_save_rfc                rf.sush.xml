@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_SUSH" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <HEAD>
+    <NAME>Z_LOG_SAVE_RFC</NAME>
+    <TYPE>RF</TYPE>
+    <DISPLAY_NAME>Z_LOG_SAVE_RFC</DISPLAY_NAME>
+    <STEXT>Save log entries in an independent LUW (RFC)</STEXT>
+   </HEAD>
+   <USOBX>
+    <USOBX>
+     <NAME>Z_LOG_SAVE_RFC</NAME>
+     <TYPE>RF</TYPE>
+     <OBJECT>S_RFC</OBJECT>
+     <OKFLAG>X</OKFLAG>
+    </USOBX>
+   </USOBX>
+  </asx:values>
+ </asx:abap>
+</abapGit>

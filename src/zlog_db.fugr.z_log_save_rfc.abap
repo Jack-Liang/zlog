@@ -1,6 +1,6 @@
 FUNCTION z_log_save_rfc.
 *"----------------------------------------------------------------------
-*"*"  Local Interface:
+*"*"Local Interface:
 *"  IMPORTING
 *"     VALUE(IV_OBJECT) TYPE  BALOBJ_D
 *"     VALUE(IV_SUBOBJECT) TYPE  BALSUBOBJ
@@ -12,7 +12,6 @@ FUNCTION z_log_save_rfc.
 *"  EXCEPTIONS
 *"      SAVE_FAILED
 *"----------------------------------------------------------------------
-
 * 经 DESTINATION 'NONE' 调用：在独立会话/独立 LUW 中落盘并提交，
 * 调用方后续 ROLLBACK WORK 不影响已保存的日志。
 *
