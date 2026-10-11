@@ -11,6 +11,7 @@
 | ZCL_LOG | 类 | 核心日志类（含 ABAP Unit） |
 | Z_LOG_SAVE_RFC / FUGR ZLOG_DB | RFC 函数 | 独立 LUW 持久化（DESTINATION 'NONE'） |
 | ZLOG_DEMO | 程序 | 演示 + 验收脚本 |
+| ZLOG_QUERY | 程序 | 查询报表：ID/日期/用户检索 + 双击追溯行跳源码（阶段2 C2/C3） |
 | SLG0 对象 ZLOG（子对象 ERROR/AUDIT/TRACE） | 定制 | **手工配置**，见下 |
 | 消息类 ZLOG 001 = `&1&2&3&4` | SE91 | **手工配置**，自由文本载体 |
 
@@ -23,7 +24,7 @@
 
 **代码**：abapGit 导入本仓库（或 zip 离线导入）。若 FUGR 导入异常，退回手工方式：SE80/ADT 建函数组 `ZLOG_DB`，在组内按 `src/zlog_db.fugr.zlog_save_rfc.abap` 文件头的接口注释建 RFC 函数 `Z_LOG_SAVE_RFC`（参数全部为标准 DDIC 类型），再粘贴源码；类与程序直接粘贴即可。
 
-**验证**：运行 `ZLOG_DEMO`，屏幕输出两个 Log ID；打开 SLG1，对象 = ZLOG，外部编号粘入任一 ID，应看到 3 条消息；双击消息查看详情，参数中有 PROG/INCL/LINE/SYS/USER/MATNR。
+**验证**：运行 `ZLOG_DEMO`，屏幕输出两个 Log ID；运行 `ZLOG_QUERY` 粘入任一 ID，应看到消息行 + `at INCL line N` 追溯行；双击追溯行直接跳到报错源码行。SLG1（对象 ZLOG + 外部编号 = ID）同样可查。
 
 ## API（ZCL_LOG，全部静态方法）
 
@@ -47,7 +48,7 @@ zcl_log=>save( ).
 
 - **ID 即返回**：`begin( )` 生成 UUID（C22）写入 BAL 外部编号，未保存也可返回给前台；与 BAL 的 LOGNUMBER 解耦。
 - **默认独立 LUW**（`c_save_indep`）：保存走 `Z_LOG_SAVE_RFC` RFC 'NONE'，调用方随后 ROLLBACK 也丢不了错误日志。`c_save_luw`（随 LUW）仅供 TRACE 类低价值日志。
-- **位置采集**：`msg/text` 记录调用者帧（`SYSTEM_CALLSTACK` 按 include 过滤 `ZCL_LOG` 帧，非固定深度）；`exception` 用 `cx_root->get_source_position` 记录 RAISE 点。SLG1 消息参数：PROG / INCL / LINE / SYS / USER + 业务键。
+- **位置采集**：`msg/text` 记录调用者帧（`SYSTEM_CALLSTACK` 按 include 过滤 `ZCL_LOG` 帧，非固定深度）；`exception` 用 `cx_root->get_source_position` 记录 RAISE 点。位置与业务键以**追溯行**入库：每条消息后追加一条 I 级消息 `at INCL line N; K=V; K=V`（816 上 BAL 消息参数要求 ALTEXT/CALLBACK，裸参数报 BL205，故弃用）。
 - `capture( )` 记录的是捕获点位置，不是原始 raise 点——尽量在错误传播必经之路调用。
 - 上下文名值对：name ≤ 20、value ≤ 50（BAL 消息参数宽度）。**不要记录敏感明文**。
 
@@ -69,8 +70,8 @@ ENDIF.
 ## 日常使用（支持人员动线）
 
 1. 用户报障提供 ID（或截图里的 `(log XXXX)`）。
-2. SLG1：对象 `ZLOG`，外部编号 = ID（完整粘贴，或前缀 + `*`）。
-3. 看到时间/用户/消息；双击消息看参数（PROG/INCL/LINE）定位报错代码。
+2. 首选：运行 `ZLOG_QUERY`（SA38/SE38），ID 粘进 P_ID（支持部分粘贴模糊匹配），日期/用户可缩小范围；结果按时间倒序，双击 `at INCL line N` 追溯行直接跳到报错源码行。
+3. 备选：SLG1，对象 `ZLOG`，外部编号 = ID（完整粘贴，或前缀 + `*`）；消息行下方的 I 级追溯行即位置与业务上下文。
 
 ## 日志清理（D1/D2）
 

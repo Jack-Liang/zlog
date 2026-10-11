@@ -12,22 +12,20 @@ FUNCTION z_log_save_rfc.
 *"  EXCEPTIONS
 *"      SAVE_FAILED
 *"----------------------------------------------------------------------
+
 * 经 DESTINATION 'NONE' 调用：在独立会话/独立 LUW 中落盘并提交，
 * 调用方后续 ROLLBACK WORK 不影响已保存的日志。
 *
-* IV_PAYLOAD 为数据簇（EXPORT ... TO DATA BUFFER），含两个 bapirettab 表：
-*   MSGS 行：LOG_NO = 条目序号；TYPE/ID/NUMBER/MESSAGE_V1..4 = 消息内容
-*   PARS 行：PARAMETER = 所属条目序号，ID = 参数名，MESSAGE_V1 = 参数值
-* （编码方：ZCL_LOG=>save_indep，与 build_transport_tables 保持一致）
+* IV_PAYLOAD 为数据簇（EXPORT msgs ... TO DATA BUFFER），一张 bapirettab 表：
+*   行 = 消息本身（TYPE/ID/NUMBER/MESSAGE_V1..4）；每条目两行——
+*   本体行 + I 级追溯行（"at INCL line N; K=V"，由编码方拼接）
+* （编码方：ZCL_LOG=>build_transport_tables；纯消息路径，无 BAL 参数）
 
   DATA: lt_msgs   TYPE bapirettab,
-        lt_pars   TYPE bapirettab,
         lv_handle TYPE balloghndl,
-        ls_msg    TYPE bal_s_msg,
-        lt_par    TYPE bal_t_par.
+        ls_msg    TYPE bal_s_msg.
 
   IMPORT msgs = lt_msgs
-         pars = lt_pars
          FROM DATA BUFFER iv_payload.
 
   CALL FUNCTION 'BAL_LOG_CREATE'
@@ -48,7 +46,7 @@ FUNCTION z_log_save_rfc.
   ENDIF.
 
   LOOP AT lt_msgs INTO DATA(ls_m).
-    CLEAR: ls_msg, lt_par.
+    CLEAR ls_msg.
     ls_msg-msgty = ls_m-type.
     ls_msg-msgid = ls_m-id.
     ls_msg-msgno = ls_m-number.
@@ -56,11 +54,6 @@ FUNCTION z_log_save_rfc.
     ls_msg-msgv2 = ls_m-message_v2.
     ls_msg-msgv3 = ls_m-message_v3.
     ls_msg-msgv4 = ls_m-message_v4.
-    LOOP AT lt_pars INTO DATA(ls_p) WHERE parameter = ls_m-log_no.
-      APPEND VALUE bal_s_par( parname  = ls_p-id
-                              parvalue = ls_p-message_v1 ) TO lt_par.
-    ENDLOOP.
-    ls_msg-params-t_par = lt_par.
     CALL FUNCTION 'BAL_LOG_MSG_ADD'
       EXPORTING
         i_log_handle = lv_handle

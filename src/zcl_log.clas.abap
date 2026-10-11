@@ -142,14 +142,20 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       split_text
         IMPORTING iv_text  TYPE clike
         CHANGING  cs_entry TYPE ty_entry,
+      split_to_vars
+        IMPORTING iv_text TYPE clike
+        EXPORTING ev_v1   TYPE symsgv
+                  ev_v2   TYPE symsgv
+                  ev_v3   TYPE symsgv
+                  ev_v4   TYPE symsgv,
       build_ret2
         IMPORTING is_entry    TYPE ty_entry
         RETURNING VALUE(rs_ret2) TYPE bapiret2,
       build_transport_tables
-        EXPORTING et_msgs TYPE bapirettab
-                  et_pars TYPE bapirettab,
+        EXPORTING et_msgs TYPE bapirettab,
       add_entries_to_bal
-        IMPORTING iv_handle TYPE balloghndl,
+        IMPORTING iv_handle TYPE balloghndl
+                  it_msgs   TYPE bapirettab,
       save_luw,
       save_indep.
 
@@ -318,15 +324,27 @@ CLASS zcl_log IMPLEMENTATION.
     " 正文拆 4 x 50 进 ZLOG 001 的 &1&2&3&4，超长部分截断
     DATA lv_text TYPE string.
     lv_text = iv_text.
-    cs_entry-msgv1 = lv_text.
+    split_to_vars( EXPORTING iv_text = lv_text
+                   IMPORTING ev_v1 = cs_entry-msgv1
+                             ev_v2 = cs_entry-msgv2
+                             ev_v3 = cs_entry-msgv3
+                             ev_v4 = cs_entry-msgv4 ).
+  ENDMETHOD.
+
+
+  METHOD split_to_vars.
+    " 正文拆 4 x 50 进 ZLOG 001 的 &1&2&3&4，超长部分截断
+    DATA lv_text TYPE string.
+    lv_text = iv_text.
+    ev_v1 = lv_text.
     IF strlen( lv_text ) > 50.
-      cs_entry-msgv2 = lv_text+50.
+      ev_v2 = lv_text+50.
     ENDIF.
     IF strlen( lv_text ) > 100.
-      cs_entry-msgv3 = lv_text+100.
+      ev_v3 = lv_text+100.
     ENDIF.
     IF strlen( lv_text ) > 150.
-      cs_entry-msgv4 = lv_text+150.
+      ev_v4 = lv_text+150.
     ENDIF.
   ENDMETHOD.
 
@@ -353,12 +371,11 @@ CLASS zcl_log IMPLEMENTATION.
 
 
   METHOD build_transport_tables.
-    " 复用标准结构 BAPIRET2 传输（避免自建 DDIC）：
-    "   it_msgs 行：LOG_NO = 条目序号
-    "   it_pars 行：PARAMETER = 所属条目序号，ID = 参数名，
-    "               MESSAGE_V1 = 参数值
+    " 复用标准结构 BAPIRET2 传输（避免自建 DDIC），每条目两行：
+    "   本体行：TYPE/ID/NUMBER/MESSAGE_V1..4 = 消息本身
+    "   追溯行：TYPE='I' ID='ZLOG'，文本 = "at INCL line N; K=V; K=V"
+    " （不用 BAL 消息参数：816 要求 ALTEXT/CALLBACK，裸参数报 BL205）
     LOOP AT gs_buffer-entries INTO DATA(ls_entry).
-      DATA(lv_idx) = |{ sy-tabix }|.
       APPEND VALUE bapiret2( type       = ls_entry-msgty
                              id         = ls_entry-msgid
                              number     = ls_entry-msgno
@@ -366,56 +383,45 @@ CLASS zcl_log IMPLEMENTATION.
                              message_v2 = ls_entry-msgv2
                              message_v3 = ls_entry-msgv3
                              message_v4 = ls_entry-msgv4
-                             log_no     = lv_idx ) TO et_msgs.
-      APPEND VALUE bapiret2( parameter  = lv_idx
-                             id         = 'PROG'
-                             message_v1 = ls_entry-pos-mainprogram ) TO et_pars.
-      APPEND VALUE bapiret2( parameter  = lv_idx
-                             id         = 'INCL'
-                             message_v1 = ls_entry-pos-include ) TO et_pars.
-      APPEND VALUE bapiret2( parameter  = lv_idx
-                             id         = 'LINE'
-                             message_v1 = |{ ls_entry-pos-line }| ) TO et_pars.
-      APPEND VALUE bapiret2( parameter  = lv_idx
-                             id         = 'SYS'
-                             message_v1 = |{ sy-sysid }/{ sy-mandt }| ) TO et_pars.
-      APPEND VALUE bapiret2( parameter  = lv_idx
-                             id         = 'USER'
-                             message_v1 = sy-uname ) TO et_pars.
+                             log_no     = |{ sy-tabix }| ) TO et_msgs.
+
+      DATA lv_trace TYPE string.
+      lv_trace = |at { ls_entry-pos-include } line { ls_entry-pos-line }|.
       LOOP AT ls_entry-ctx ASSIGNING FIELD-SYMBOL(<ls_ctx>).
-        APPEND VALUE bapiret2( parameter  = lv_idx
-                               id         = <ls_ctx>-name
-                               message_v1 = <ls_ctx>-value ) TO et_pars.
+        lv_trace = |{ lv_trace }; { <ls_ctx>-name }={ <ls_ctx>-value }|.
       ENDLOOP.
+
+      DATA: lv_v1 TYPE symsgv, lv_v2 TYPE symsgv,
+            lv_v3 TYPE symsgv, lv_v4 TYPE symsgv.
+      split_to_vars( EXPORTING iv_text = lv_trace
+                     IMPORTING ev_v1 = lv_v1 ev_v2 = lv_v2
+                               ev_v3 = lv_v3 ev_v4 = lv_v4 ).
+      APPEND VALUE bapiret2( type       = 'I'
+                             id         = c_msgclass_txt
+                             number     = c_txtno_txt
+                             message_v1 = lv_v1
+                             message_v2 = lv_v2
+                             message_v3 = lv_v3
+                             message_v4 = lv_v4
+                             log_no     = |{ sy-tabix }| ) TO et_msgs.
     ENDLOOP.
   ENDMETHOD.
 
 
   METHOD add_entries_to_bal.
-    LOOP AT gs_buffer-entries INTO DATA(ls_entry).
-      DATA lt_par TYPE bal_t_par.
-      lt_par = VALUE #(
-        ( parname = 'PROG' parvalue = ls_entry-pos-mainprogram )
-        ( parname = 'INCL' parvalue = ls_entry-pos-include )
-        ( parname = 'LINE' parvalue = |{ ls_entry-pos-line }| )
-        ( parname = 'SYS'  parvalue = |{ sy-sysid }/{ sy-mandt }| )
-        ( parname = 'USER' parvalue = sy-uname ) ).
-      LOOP AT ls_entry-ctx ASSIGNING FIELD-SYMBOL(<ls_ctx>).
-        APPEND VALUE bal_s_par( parname = <ls_ctx>-name
-                                parvalue = <ls_ctx>-value ) TO lt_par.
-      ENDLOOP.
+    " 纯消息路径（无参数，见 build_transport_tables 注释）
+    LOOP AT it_msgs INTO DATA(ls_m).
       CALL FUNCTION 'BAL_LOG_MSG_ADD'
         EXPORTING
           i_log_handle = iv_handle
           i_s_msg      = VALUE bal_s_msg(
-              msgty  = ls_entry-msgty
-              msgid  = ls_entry-msgid
-              msgno  = ls_entry-msgno
-              msgv1  = ls_entry-msgv1
-              msgv2  = ls_entry-msgv2
-              msgv3  = ls_entry-msgv3
-              msgv4  = ls_entry-msgv4
-              params = VALUE #( t_par = lt_par ) )
+              msgty = ls_m-type
+              msgid = ls_m-id
+              msgno = ls_m-number
+              msgv1 = ls_m-message_v1
+              msgv2 = ls_m-message_v2
+              msgv3 = ls_m-message_v3
+              msgv4 = ls_m-message_v4 )
         EXCEPTIONS
           OTHERS       = 1.
     ENDLOOP.
@@ -442,7 +448,10 @@ CLASS zcl_log IMPLEMENTATION.
     IF sy-subrc <> 0.
       RETURN.
     ENDIF.
-    add_entries_to_bal( lv_handle ).
+    DATA lt_msgs TYPE bapirettab.
+    build_transport_tables( IMPORTING et_msgs = lt_msgs ).
+    add_entries_to_bal( iv_handle = lv_handle
+                        it_msgs   = lt_msgs ).
     CALL FUNCTION 'BAL_DB_SAVE'
       EXPORTING
         i_save_all = abap_true
@@ -453,16 +462,13 @@ CLASS zcl_log IMPLEMENTATION.
 
   METHOD save_indep.
     " RFC 'NONE'：起独立内部会话/独立 LUW 保存，调用方 ROLLBACK 带不走。
-    " 两张传输表打包成 XSTRING 数据簇传参（接口全标量，
+    " 传输表打包成 XSTRING 数据簇传参（接口全标量，
     " 与 abapGit 自带远程 FM 的参数风格一致，规避 TABLES 参数）
     DATA: lt_msgs    TYPE bapirettab,
-          lt_pars    TYPE bapirettab,
           lv_payload TYPE xstring.
 
-    build_transport_tables( IMPORTING et_msgs = lt_msgs
-                                      et_pars = lt_pars ).
+    build_transport_tables( IMPORTING et_msgs = lt_msgs ).
     EXPORT msgs = lt_msgs
-           pars = lt_pars
            TO DATA BUFFER lv_payload.
 
     CALL FUNCTION 'Z_LOG_SAVE_RFC'
