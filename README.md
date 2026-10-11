@@ -1,8 +1,12 @@
-# ZLOG — 前台报错可追溯性改造（阶段 1 MVP）
+# ZLOG — 前台报错可追溯性改造
 
-每条用户可见的消息携带日志 ID；凭 ID 在 SLG1 查到**时间、用户、系统、报错位置（程序/Include/行号）、业务上下文**。
+每条用户可见的消息携带日志 ID；凭 ID 查到**时间、用户、系统、报错位置（程序/Include/行号）、调用链、业务上下文**。
 
-对应开发计划：`abap-message-trace-dev-plan.md` 的阶段 1（模块 A 核心类 + B 出口兜底 + C1 查询规程 + D1/D2 清理），参考项目 [SchwarzIT/sap-usi-logging-api](https://github.com/SchwarzIT/sap-usi-logging-api)、[ABAP-Logger](https://github.com/ABAP-Logger/ABAP-Logger)、[greltel/abap-cloud-logger](https://github.com/greltel/abap-cloud-logger)。
+对应开发计划：`abap-message-trace-dev-plan.md` 的阶段 1~3（模块 A 核心类 + B 出口三形态 + C 查询 + D 清理治理 + E 基线扫描），参考项目 [SchwarzIT/sap-usi-logging-api](https://github.com/SchwarzIT/sap-usi-logging-api)、[ABAP-Logger/ABAP-Logger](https://github.com/ABAP-Logger/ABAP-Logger)、[greltel/abap-cloud-logger](https://github.com/greltel/abap-cloud-logger)。
+
+每条用户可见的消息携带日志 ID；凭 ID 查到**时间、用户、系统、报错位置（程序/Include/行号）、调用链、业务上下文**。
+
+对应开发计划：`abap-message-trace-dev-plan.md` 的阶段 1~3（模块 A 核心类 + B 出口三形态 + C 查询 + D 清理治理 + E 基线扫描），参考项目 [SchwarzIT/sap-usi-logging-api](https://github.com/SchwarzIT/sap-usi-logging-api)、[ABAP-Logger](https://github.com/ABAP-Logger/ABAP-Logger)、[greltel/abap-cloud-logger](https://github.com/greltel/abap-cloud-logger)。
 
 ## 对象清单
 
@@ -36,8 +40,11 @@ DATA(ls_ret2) = zcl_log=>log_now(
     it_ctx  = VALUE #( ( name = 'VBELN' value = lv_vbeln ) ) ).
 lv_msgtx = ls_ret2-message.             " 文本尾部已带 " (log XXXX)"
 
+" 一行式 / 双字段形态见下节"出口接法"
+
 " 会话式（多条件、多步骤共享一个 ID）：
-DATA(lv_id) = zcl_log=>begin( iv_subobject = zcl_log=>c_subobject_aud ).
+DATA(lv_id) = zcl_log=>begin( iv_subobject = zcl_log=>c_subobject_aud
+                              iv_stack     = abap_true ).   " 可选：记录调用链
 zcl_log=>msg(  iv_msgid = 'ZSD' iv_msgno = '017' iv_msgv1 = lv_matnr ).  " T100 消息
 zcl_log=>text( |重试第 { n } 次失败| ).                                    " 自由文本
 zcl_log=>exception( lx ).                " 类异常：文本 + RAISE 点行号
@@ -51,6 +58,8 @@ zcl_log=>save( ).
 - **默认独立 LUW**（`c_save_indep`）：保存走 `Z_LOG_SAVE_RFC` RFC 'NONE'，调用方随后 ROLLBACK 也丢不了错误日志。`c_save_luw`（随 LUW）仅供 TRACE 类低价值日志。
 - **位置采集**：`msg/text` 记录调用者帧（`SYSTEM_CALLSTACK` 按 include 过滤 `ZCL_LOG` 帧，非固定深度）；`exception` 用 `cx_root->get_source_position` 记录 RAISE 点。位置与业务键以**追溯行**入库：每条消息后追加一条 I 级消息 `at INCL line N; K=V; K=V`（816 上 BAL 消息参数要求 ALTEXT/CALLBACK，裸参数报 BL205，故弃用）。
 - **量控（D3）**：同文本同位置的连续重复自动合并，追溯行标注总次数（`at INCL line N x5`）；单日志上限 `c_max_entries`（默认 200），超出只计数并在保存时补一条 W 级提示。循环里刷消息不再撑爆日志。
+- **调用链（A6，可开关）**：`begin( iv_stack = abap_true )` 后每条目额外落一条 `stack: INCL(行) <- INCL(行)...`（直接调用方之后的 4 帧），排查深层嵌套路径用；默认关闭省日志量。
+- **保留期（D5）**：落库时按子对象写 BAL 头原生字段 `ALDATE_DEL`（ERR 90 / AUDIT 365 / TRACE 14 天，常量 `c_retention_*`），SLG2 清理作业自动尊重——保留策略跟着数据走。
 - `capture( )` 记录的是捕获点位置，不是原始 raise 点——尽量在错误传播必经之路调用。
 - 上下文名值对：name ≤ 20、value ≤ 50（BAL 消息参数宽度）。**不要记录敏感明文**。
 
@@ -95,15 +104,11 @@ ENDIF.
 2. 首选：运行 `ZLOG_QUERY`（SA38/SE38），ID 粘进 P_ID（支持部分粘贴模糊匹配），日期/用户可缩小范围；结果按时间倒序，双击 `at INCL line N` 追溯行直接跳到报错源码行。
 3. 备选：SLG1，对象 `ZLOG`，外部编号 = ID（完整粘贴，或前缀 + `*`）；消息行下方的 I 级追溯行即位置与业务上下文。
 
-## 日志清理（D1/D2）
+## 日志清理（D1/D2/D5）
 
-| 子对象 | 用途 | 建议保留期 |
-|---|---|---|
-| ERROR | 前台报错 | 90 天 |
-| AUDIT | 留痕 | 365 天 |
-| TRACE | 临时排查 | 14 天 |
+保留期已由数据自带：落库时按子对象写入 BAL 头 `ALDATE_DEL`（ERR 90 天 / AUDIT 365 天 / TRACE 14 天），**SLG2 删除作业自动尊重该日期**，到期的日志才可被删。
 
-SLG2 按对象+子对象+日期范围建后台作业（每月跑一次，删 N-保留期 之前的），日期范围分批、避开业务高峰。**改造上线第一天就建作业**。
+因此作业很简单：SLG2 按对象 `ZLOG` + 日期范围建后台作业（每月跑一次），不必按子对象拆分，也不必精确计算保留期——数据自己带着"免删期"。日期范围分批、避开业务高峰。**改造上线第一天就建作业**。
 
 ## 基线扫描（存量改造 E1）
 
@@ -120,9 +125,13 @@ SLG2 按对象+子对象+日期范围建后台作业（每月跑一次，删 N-�
 - 日志组件自身失败静默（不打断业务）；错误轨迹是后续项（参考 abap-cloud-logger error trail）。
 - 重命名 ZCL_LOG 需同步修改 `caller_position` 的栈帧过滤串。
 
-## 路线图（对应开发计划阶段 2/3）
+## 路线图（已完成项见上文对应章节）
 
-- C2/C3：查询报表（BAL_DB_SEARCH/LOAD，双击调用栈帧 `RS_TOOL_ACCESS` 跳源码行）
+已完成：核心类（含量控 D3 / 调用链 A6 / 保留期 D5）· 出口三形态（text_now / log_parts / log_now，B1~B3）· 查询报表 ZLOG_QUERY（C2/C3，双击跳源码 + 位置回填）· 基线扫描 ZLOG_SCAN（E1）· 8 个 ABAP Unit · abaplint 全绿 · 真机 E2E 验收。
+
+按需待做：
+
 - A8：JSON 上下文侧表（需同步挂接标准删除，见 SchwarzIT 教训）
 - D4：按用户临时日志级别（带失效日期）
 - E3：ATC 检查禁止裸消息
+- Fiori 版查询界面（RAP/OData 暴露 ZLOG_QUERY 逻辑）
