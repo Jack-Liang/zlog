@@ -1,15 +1,15 @@
 *******************************************************************
 *   System-defined Include-files.                                 *
 *******************************************************************
-INCLUDE lzlog_dbtop.
-INCLUDE lzlog_dbuxx.
+INCLUDE lzmsgtrace_dbtop.
+INCLUDE lzmsgtrace_dbuxx.
 
 *******************************************************************
 *   User-defined Include-files (if necessary).                    *
 *******************************************************************
-* INCLUDE LZLOG_DBF...               " Subroutines
-* INCLUDE LZLOG_DBO...               " PBO-Modules
-* INCLUDE LZLOG_DBI...               " PAI-Modules
-* INCLUDE LZLOG_DBE...               " Events
-* INCLUDE LZLOG_DBP...               " Local class implement.
-* INCLUDE LZLOG_DBT99.               " ABAP Unit tests
+* INCLUDE LZMSGTRACE_DBF...               " Subroutines
+* INCLUDE LZMSGTRACE_DBO...               " PBO-Modules
+* INCLUDE LZMSGTRACE_DBI...               " PAI-Modules
+* INCLUDE LZMSGTRACE_DBE...               " Events
+* INCLUDE LZMSGTRACE_DBP...               " Local class implement.
+* INCLUDE LZMSGTRACE_DBT99.               " ABAP Unit tests

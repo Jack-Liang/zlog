@@ -1,4 +1,4 @@
-REPORT zlog_query.
+REPORT zmsgtrace_query.
 
 * ---------------------------------------------------------------------
 * ZLOG 查询报表（开发计划 C2/C3，阶段 2）
@@ -56,18 +56,26 @@ CLASS lcl_events IMPLEMENTATION.
 
     ASSIGN COMPONENT 'INCL' OF STRUCTURE <ls_out> TO FIELD-SYMBOL(<lv_incl>).
     ASSIGN COMPONENT 'LINE' OF STRUCTURE <ls_out> TO FIELD-SYMBOL(<lv_line>).
-    IF <lv_incl> IS INITIAL OR <lv_line> IS INITIAL.
+    IF <lv_incl> IS NOT INITIAL AND <lv_line> IS NOT INITIAL.
+      CALL FUNCTION 'RS_TOOL_ACCESS'
+        EXPORTING
+          operation   = 'SHOW'
+          object_type = 'PROG'
+          object_name = <lv_incl>
+          position    = <lv_line>
+        EXCEPTIONS
+          OTHERS      = 0.
       RETURN.                          " 仅追溯行可跳转
     ENDIF.
 
-    CALL FUNCTION 'RS_TOOL_ACCESS'
-      EXPORTING
-        operation   = 'SHOW'
-        object_type = 'PROG'
-        object_name = <lv_incl>
-        position    = <lv_line>
-      EXCEPTIONS
-        OTHERS      = 0.
+    " A8：快照行 → 弹窗展示完整 JSON
+    ASSIGN COMPONENT 'SNAP_JSON' OF STRUCTURE <ls_out> TO FIELD-SYMBOL(<lv_json>).
+    IF <lv_json> IS NOT INITIAL.
+      TRY.
+          cl_demo_output=>display_text( <lv_json> ).
+        CATCH cx_root ##NO_HANDLER.
+      ENDTRY.
+    ENDIF.
   ENDMETHOD.
 
 ENDCLASS.
@@ -89,6 +97,7 @@ FORM search_and_display.
            text      TYPE c LENGTH 220,
            incl      TYPE c LENGTH 40,
            line      TYPE i,
+           snap_json TYPE string,       " A8：完整 JSON（双击弹窗展示）
          END OF ty_out,
          ty_out_t TYPE STANDARD TABLE OF ty_out WITH EMPTY KEY.
 
@@ -206,6 +215,37 @@ FORM search_and_display.
       lv_pline = lv_line.
     ENDIF.
   ENDLOOP.
+
+  " ---- 3) A8 快照行：ZMSGTRACE_CTX 按 log_id 关联，S 级行 + 双击看完整 JSON ----
+  DATA lr_id TYPE RANGE OF zmsgtrace_ctx-log_id.
+  LOOP AT lt_headers ASSIGNING <ls_hdr>.
+    APPEND VALUE #( sign = 'I' option = 'EQ' low = <ls_hdr>-extnumber(20) )
+           TO lr_id.
+  ENDLOOP.
+
+  IF lr_id IS NOT INITIAL.
+    SELECT log_id, name, data_str FROM zmsgtrace_ctx
+      INTO TABLE @DATA(lt_snap)
+      WHERE log_id IN @lr_id.
+
+    LOOP AT lt_snap INTO DATA(ls_snap).
+      READ TABLE lt_headers ASSIGNING <ls_hdr>
+           WITH KEY extnumber = ls_snap-log_id.
+      IF sy-subrc <> 0.
+        CONTINUE.
+      ENDIF.
+      APPEND VALUE ty_out(
+          log_id    = ls_snap-log_id
+          subobject = <ls_hdr>-subobject
+          aluser    = <ls_hdr>-aluser
+          aldate    = <ls_hdr>-aldate
+          altime    = <ls_hdr>-altime
+          msgty     = 'S'
+          text      = |snap { ls_snap-name }: { substring( val = ls_snap-data_str
+                                                           len = 160 ) }|
+          snap_json = ls_snap-data_str ) TO lt_out.
+    ENDLOOP.
+  ENDIF.
 
   IF lt_out IS INITIAL.
     MESSAGE |找到 { lines( lt_headers ) } 个日志头，但无消息内容| TYPE 'S'.

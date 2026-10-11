@@ -1,16 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<abapGit version="v1.0.0">
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_PROG" serializer_version="v1.0.0">
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <PROGDIR>
-    <NAME>SAPLZLOG_DB</NAME>
-    <DBAPL>S</DBAPL>
-    <DBNA>D$</DBNA>
-    <SUBC>F</SUBC>
-    <APPL>S</APPL>
+    <NAME>ZMSGTRACE_DEMO</NAME>
+    <SUBC>1</SUBC>
     <RLOAD>E</RLOAD>
     <FIXPT>X</FIXPT>
-    <LDBNAME>D$S</LDBNAME>
     <UCCHECK>X</UCCHECK>
    </PROGDIR>
   </asx:values>

@@ -3,9 +3,10 @@
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <PROGDIR>
-    <NAME>ZLOG_SCAN</NAME>
+    <NAME>ZMSGTRACE_QUERY</NAME>
     <DBAPL>S</DBAPL>
     <SUBC>1</SUBC>
+    <RSTAT>A</RSTAT>
     <FIXPT>X</FIXPT>
     <LDBNAME>D$S</LDBNAME>
     <UCCHECK>X</UCCHECK>
@@ -13,8 +14,8 @@
    <TPOOL>
     <item>
      <ID>R</ID>
-     <ENTRY>ZLOG baseline scan: find raw message points per package</ENTRY>
-     <LENGTH>55</LENGTH>
+     <ENTRY>ZLOG query report: search by log id, double-click trace line to jump t</ENTRY>
+     <LENGTH>70</LENGTH>
     </item>
    </TPOOL>
   </asx:values>

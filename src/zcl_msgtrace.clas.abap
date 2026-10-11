@@ -1,4 +1,4 @@
-CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
+CLASS zcl_msgtrace DEFINITION PUBLIC FINAL CREATE PUBLIC.
 
   " ---------------------------------------------------------------------
   " 前台报错可追溯性改造 · 核心日志类（开发计划模块 A）
@@ -9,9 +9,9 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
   " 2. 一次交互一个日志一个 ID，msg/text/exception 条目共享
   " 3. 默认独立 LUW 保存（RFC 'NONE'），调用方 ROLLBACK 不丢错误日志
   "    （借鉴 greltel/abap-cloud-logger 应急日志思路；ABAP-Logger Issue #4 教训）
-  " 4. 调用者位置按栈帧过滤（include CS 'ZCL_LOG'），不写死栈深度
+  " 4. 调用者位置按栈帧过滤（include CS 'ZCL_MSGTRACE'），不写死栈深度
   "    （SchwarzIT caller_level = 4 的教训）
-  " 5. 自由文本借消息类 ZLOG 001（&1&2&3&4）落成标准 BAL 消息，
+  " 5. 自由文本借消息类 ZMSGTRACE 001（&1&2&3&4）落成标准 BAL 消息，
   "    从而每条消息都能带 PROG/INCL/LINE 等参数，SLG1 详情可见
   " ---------------------------------------------------------------------
 
@@ -28,7 +28,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       ty_ctx_t TYPE STANDARD TABLE OF ty_ctx WITH EMPTY KEY.
 
     CONSTANTS:
-      c_object        TYPE balobj_d  VALUE 'ZLOG',   " SLG0 对象
+      c_object        TYPE balobj_d  VALUE 'ZMSGTRACE',   " SLG0 对象
       c_subobject_err TYPE balsubobj VALUE 'ERROR',
       c_subobject_aud TYPE balsubobj VALUE 'AUDIT',
       c_subobject_trc TYPE balsubobj VALUE 'TRACE',
@@ -38,7 +38,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       c_retention_trc TYPE i VALUE 14,
       c_save_luw      TYPE tv_save_mode VALUE 'L',   " 随调用方 LUW（TRACE 用）
       c_save_indep    TYPE tv_save_mode VALUE 'R',   " 独立 LUW（默认，回滚不丢）
-      c_msgclass_txt  TYPE sy-msgid VALUE 'ZLOG',    " SE91: ZLOG 001 = &1&2&3&4
+      c_msgclass_txt  TYPE sy-msgid VALUE 'ZMSGTRACE',    " SE91: ZMSGTRACE 001 = &1&2&3&4
       c_txtno_txt     TYPE sy-msgno VALUE '001',
       c_max_entries   TYPE i        VALUE 200.       " 单日志条目上限（量控）
 
@@ -51,6 +51,14 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         it_ctx       TYPE ty_ctx_t    OPTIONAL
         iv_stack     TYPE abap_bool   DEFAULT abap_false
       RETURNING VALUE(rv_log_id) TYPE tv_log_id.
+
+    " 结构化快照（A8）：任意结构/内表序列化为 JSON 存侧表 ZMSGTRACE_CTX，
+    " 会话级（与条目同 LUW 保存），还原"当时的数据长什么样"
+    " 示例：zcl_msgtrace=>snap( iv_name = 'ORDER' ig_data = ls_order ).
+    CLASS-METHODS snap
+      IMPORTING
+        iv_name TYPE clike
+        ig_data TYPE any.
 
     " T100 消息条目
     CLASS-METHODS msg
@@ -99,7 +107,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       RETURNING VALUE(rs_ret2) TYPE bapiret2.
 
     " 一步式纯文本版：返回值直接赋给 msgtx（尾部带 log ID）
-    " 存量迁移一行替换：ls_return-msgtx = zcl_log=>text_now( |...| ).
+    " 存量迁移一行替换：ls_return-msgtx = zcl_msgtrace=>text_now( |...| ).
     " 需要类型/LOG_NO 字段时用 log_now
     CLASS-METHODS text_now
       IMPORTING
@@ -110,7 +118,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       RETURNING VALUE(rv_text) TYPE string.
 
     " 一步式双字段版（B3）：msgtx 干净文本 + logid 分离返回，一次调用直填两个字段
-    "   zcl_log=>log_parts( EXPORTING iv_text = |...|
+    "   zcl_msgtrace=>log_parts( EXPORTING iv_text = |...|
     "                       IMPORTING ev_text = ls_return-msgtx
     "                                 ev_log_id = ls_return-logid ).
     CLASS-METHODS log_parts
@@ -127,6 +135,8 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
     CLASS-METHODS save RETURNING VALUE(rv_log_id) TYPE tv_log_id.
 
     CLASS-METHODS get_id RETURNING VALUE(rv_log_id) TYPE tv_log_id.
+    " 最近一次保存的日志 ID（save 后 get_id 已清空时的取值口）
+    CLASS-METHODS get_last_id RETURNING VALUE(rv_log_id) TYPE tv_log_id.
     CLASS-METHODS is_active RETURNING VALUE(rv_active) TYPE abap_bool.
     CLASS-METHODS reset.                       " 丢弃未保存内容
 
@@ -152,6 +162,11 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         stack   TYPE string,             " 调用链（A6 开关开启时）
       END OF ty_entry,
       ty_entries TYPE STANDARD TABLE OF ty_entry WITH EMPTY KEY,
+      BEGIN OF ty_snap,                   " A8 快照（与 FM 侧类型保持一致）
+        name     TYPE c LENGTH 30,
+        data_str TYPE string,             " JSON
+      END OF ty_snap,
+      ty_snap_t TYPE STANDARD TABLE OF ty_snap WITH EMPTY KEY,
       BEGIN OF ty_buffer,
         log_id      TYPE tv_log_id,
         subobject   TYPE balsubobj,
@@ -164,9 +179,11 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         base_ctx    TYPE ty_ctx_t,
         overflow    TYPE i,              " 超上限被丢弃的消息数
         stack_mode  TYPE abap_bool,      " 每条目附加调用链（A6）
+        snaps       TYPE ty_snap_t,      " 结构化快照（A8）
       END OF ty_buffer.
 
     CLASS-DATA gs_buffer TYPE ty_buffer.
+    CLASS-DATA gv_last_id TYPE tv_log_id.      " 最近一次保存的 ID
 
     CLASS-METHODS:
       ensure_begin,
@@ -177,6 +194,12 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         RETURNING VALUE(rs_pos) TYPE ty_position,
       build_stack
         RETURNING VALUE(rv_stack) TYPE string,
+      snap_serialize
+        IMPORTING iv_name  TYPE clike
+                  ig_data  TYPE any
+        RETURNING VALUE(rv_json) TYPE string,
+      write_snaps_to_db
+        IMPORTING iv_log_id TYPE tv_log_id,
       retention_days
         RETURNING VALUE(rv_days) TYPE i,
       split_text
@@ -202,7 +225,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
 ENDCLASS.
 
 
-CLASS zcl_log IMPLEMENTATION.
+CLASS zcl_msgtrace IMPLEMENTATION.
 
   METHOD begin.
     IF gs_buffer-log_id IS NOT INITIAL.
@@ -321,6 +344,43 @@ CLASS zcl_log IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD snap.
+    ensure_begin( ).
+    APPEND VALUE ty_snap( name     = iv_name
+                          data_str = snap_serialize( iv_name = iv_name
+                                                     ig_data  = ig_data ) )
+           TO gs_buffer-snaps.
+  ENDMETHOD.
+
+
+  METHOD snap_serialize.
+    " 任意结构/内表 → JSON（sxml 写 JSON，任意发布可用）。
+    " 键固定为 "data"；快照名存 ZMSGTRACE_CTX-NAME 列，不在 JSON 里重复
+    TRY.
+        DATA(lo_wr) = cl_sxml_string_writer=>create( if_sxml=>co_xt_json ).
+        CALL TRANSFORMATION id
+          SOURCE data = ig_data
+          RESULT XML lo_wr.
+        rv_json = cl_abap_codepage=>convert_from( lo_wr->get_output( ) ).
+      CATCH cx_root ##NO_HANDLER.
+        CLEAR rv_json.                   " 序列化失败不阻断业务
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD write_snaps_to_db.
+    " A8：快照写侧表（随 LUW 模式保存时由类直写；独立 LUW 模式由 FM 写）
+    LOOP AT gs_buffer-snaps INTO DATA(ls_snap).
+      INSERT zmsgtrace_ctx FROM @( VALUE #( log_id     = iv_log_id
+                                       seq        = |{ sy-tabix }|
+                                       name       = ls_snap-name
+                                       data_str   = ls_snap-data_str
+                                       created_by = gs_buffer-created_by
+                                       created_on = gs_buffer-created_on ) ).
+    ENDLOOP.
+  ENDMETHOD.
+
+
   METHOD log_now.
     begin( iv_subobject = iv_subobject it_ctx = it_ctx ).
     rs_ret2 = text( iv_text = iv_text iv_msgty = iv_msgty it_ctx = it_ctx ).
@@ -330,6 +390,7 @@ CLASS zcl_log IMPLEMENTATION.
 
   METHOD save.
     rv_log_id = gs_buffer-log_id.
+    gv_last_id = gs_buffer-log_id.
     IF gs_buffer-log_id IS INITIAL OR gs_buffer-entries IS INITIAL.
       CLEAR gs_buffer.
       RETURN.
@@ -353,6 +414,11 @@ CLASS zcl_log IMPLEMENTATION.
 
   METHOD get_id.
     rv_log_id = gs_buffer-log_id.
+  ENDMETHOD.
+
+
+  METHOD get_last_id.
+    rv_log_id = gv_last_id.
   ENDMETHOD.
 
 
@@ -417,7 +483,7 @@ CLASS zcl_log IMPLEMENTATION.
     " 去掉日志类自身栈帧，剩余第一帧即业务调用方。
     " 不写死栈深度：类内部新增包装层不影响定位
     " （重命名本类时需同步修改过滤串）
-    DELETE lt_stack WHERE include CS 'ZCL_LOG'.
+    DELETE lt_stack WHERE include CS 'ZCL_MSGTRACE'.
     READ TABLE lt_stack INTO DATA(ls_frame) INDEX 1.
     IF sy-subrc = 0.
       rs_pos-mainprogram = ls_frame-mainprogram.
@@ -434,7 +500,7 @@ CLASS zcl_log IMPLEMENTATION.
     CALL FUNCTION 'SYSTEM_CALLSTACK'
       IMPORTING
         callstack = lt_stack.
-    DELETE lt_stack WHERE include CS 'ZCL_LOG'.
+    DELETE lt_stack WHERE include CS 'ZCL_MSGTRACE'.
     LOOP AT lt_stack INTO DATA(ls_frame) FROM 2 TO 5.
       IF rv_stack IS NOT INITIAL.
         rv_stack = |{ rv_stack } <- |.
@@ -458,7 +524,7 @@ CLASS zcl_log IMPLEMENTATION.
 
 
   METHOD split_text.
-    " 正文拆 4 x 50 进 ZLOG 001 的 &1&2&3&4，超长部分截断
+    " 正文拆 4 x 50 进 ZMSGTRACE 001 的 &1&2&3&4，超长部分截断
     DATA lv_text TYPE string.
     lv_text = iv_text.
     split_to_vars( EXPORTING iv_text = lv_text
@@ -470,7 +536,7 @@ CLASS zcl_log IMPLEMENTATION.
 
 
   METHOD split_to_vars.
-    " 正文拆 4 x 50 进 ZLOG 001 的 &1&2&3&4，超长部分截断
+    " 正文拆 4 x 50 进 ZMSGTRACE 001 的 &1&2&3&4，超长部分截断
     DATA lv_text TYPE string.
     lv_text = iv_text.
     ev_v1 = lv_text.
@@ -510,7 +576,7 @@ CLASS zcl_log IMPLEMENTATION.
   METHOD build_transport_tables.
     " 复用标准结构 BAPIRET2 传输（避免自建 DDIC），每条目两行：
     "   本体行：TYPE/ID/NUMBER/MESSAGE_V1..4 = 消息本身
-    "   追溯行：TYPE='I' ID='ZLOG'，文本 = "at INCL line N; K=V; K=V"
+    "   追溯行：TYPE='I' ID='ZMSGTRACE'，文本 = "at INCL line N; K=V; K=V"
     " （不用 BAL 消息参数：816 要求 ALTEXT/CALLBACK，裸参数报 BL205）
     LOOP AT gs_buffer-entries INTO DATA(ls_entry).
       APPEND VALUE bapiret2( type       = ls_entry-msgty
@@ -613,6 +679,7 @@ CLASS zcl_log IMPLEMENTATION.
         i_save_all = abap_true
       EXCEPTIONS
         OTHERS      = 1.
+    write_snaps_to_db( gs_buffer-log_id ).   " A8 快照随同 LUW 落库
   ENDMETHOD.
 
 
@@ -624,10 +691,11 @@ CLASS zcl_log IMPLEMENTATION.
           lv_payload TYPE xstring.
 
     build_transport_tables( IMPORTING et_msgs = lt_msgs ).
-    EXPORT msgs = lt_msgs
+    EXPORT msgs  = lt_msgs
+           snaps = gs_buffer-snaps          " A8 快照（FM 侧同布局类型解开）
            TO DATA BUFFER lv_payload.
 
-    CALL FUNCTION 'Z_LOG_SAVE_RFC'
+    CALL FUNCTION 'ZMSGTRACE_SAVE_RFC'
       DESTINATION 'NONE'
       EXPORTING
         iv_object           = c_object

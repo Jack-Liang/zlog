@@ -1,10 +1,10 @@
-REPORT zlog_scan.
+REPORT zmsgtrace_scan.
 
 * ---------------------------------------------------------------------
 * ZLOG 基线扫描（开发计划 E1：存量消息点清单 → 热点替换排期）
 *
 * 扫描一个开发包内 PROG / FUGR（函数 include）/ CLAS（方法 include）
-* 的源码，找"未走 ZCL_LOG 的裸消息点"（默认模式：MESSAGE、msgtx）。
+* 的源码，找"未走 ZCL_MSGTRACE 的裸消息点"（默认模式：MESSAGE、msgtx）。
 * 输出 = 候选清单（含误报，人工确认），作为出口兜底运行后的
 * 热点替换排期输入。
 *
@@ -134,8 +134,8 @@ FORM scan_source USING iv_type    TYPE trobjtype
   LOOP AT it_src INTO DATA(lv_line).
     lv_up = lv_line.
     TRANSLATE lv_up TO UPPER CASE.
-    " 已走 ZCL_LOG 的行不算裸消息
-    CHECK lv_up NS 'ZCL_LOG'.
+    " 已走 ZCL_MSGTRACE 的行不算裸消息
+    CHECK lv_up NS 'ZCL_MSGTRACE'.
 
     IF p_pat1 IS NOT INITIAL
        AND lv_up CS lv_pat1.

@@ -1,4 +1,4 @@
-FUNCTION z_log_save_rfc.
+FUNCTION zmsgtrace_save_rfc.
 *"----------------------------------------------------------------------
 *"*"Local Interface:
 *"  IMPORTING
@@ -18,24 +18,45 @@ FUNCTION z_log_save_rfc.
 * IV_PAYLOAD 为数据簇（EXPORT msgs ... TO DATA BUFFER），一张 bapirettab 表：
 *   行 = 消息本身（TYPE/ID/NUMBER/MESSAGE_V1..4）；每条目两行——
 *   本体行 + I 级追溯行（"at INCL line N; K=V"，由编码方拼接）
-* （编码方：ZCL_LOG=>build_transport_tables；纯消息路径，无 BAL 参数）
+* （编码方：ZCL_MSGTRACE=>build_transport_tables；纯消息路径，无 BAL 参数）
+
+  TYPES: BEGIN OF ty_snap,              " A8 快照（与 ZCL_MSGTRACE=>ty_snap 布局一致）
+           name     TYPE c LENGTH 30,
+           data_str TYPE string,
+         END OF ty_snap,
+         ty_snap_t TYPE STANDARD TABLE OF ty_snap WITH EMPTY KEY.
 
   DATA: lt_msgs   TYPE bapirettab,
+        lt_snaps  TYPE ty_snap_t,
         lv_handle TYPE balloghndl,
         ls_msg    TYPE bal_s_msg,
-        lv_ret    TYPE i.
+        lv_ret    TYPE i,
+        lv_seq    TYPE n LENGTH 4.
 
-  IMPORT msgs = lt_msgs
+  IMPORT msgs  = lt_msgs
+         snaps = lt_snaps
          FROM DATA BUFFER iv_payload.
 
-  " D5 保留期：按子对象映射（与 ZCL_LOG 常量一致），SLG2 自动尊重
+  " A8：快照写侧表（独立 LUW 内，随日志一起提交）
+  LOOP AT lt_snaps INTO DATA(ls_s).
+    lv_seq = sy-tabix.
+    INSERT zmsgtrace_ctx FROM @( VALUE #(
+        log_id     = iv_extnumber(20)
+        seq        = lv_seq
+        name       = ls_s-name
+        data_str   = ls_s-data_str
+        created_by = iv_created_by
+        created_on = iv_created_on ) ).
+  ENDLOOP.
+
+  " D5 保留期：按子对象映射（与 ZCL_MSGTRACE 常量一致），SLG2 自动尊重
   CASE iv_subobject.
-    WHEN zcl_log=>c_subobject_aud.
-      lv_ret = zcl_log=>c_retention_aud.
-    WHEN zcl_log=>c_subobject_trc.
-      lv_ret = zcl_log=>c_retention_trc.
+    WHEN zcl_msgtrace=>c_subobject_aud.
+      lv_ret = zcl_msgtrace=>c_retention_aud.
+    WHEN zcl_msgtrace=>c_subobject_trc.
+      lv_ret = zcl_msgtrace=>c_retention_trc.
     WHEN OTHERS.
-      lv_ret = zcl_log=>c_retention_err.
+      lv_ret = zcl_msgtrace=>c_retention_err.
   ENDCASE.
 
   CALL FUNCTION 'BAL_LOG_CREATE'
