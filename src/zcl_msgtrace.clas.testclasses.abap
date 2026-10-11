@@ -1,12 +1,8 @@
-" sync marker: force test include into system via abapGit pull 2026-10-12
-" 单元测试只覆盖纯逻辑（ID 生成、ret2 组装、文本拆分、缓冲管理）。
+" 单元测试全部走黑盒路径（公开 API + get_stats 内省），无需 FRIENDS。
 " 持久化路径（save_luw / save_indep → RFC 'NONE'）有数据库副作用，
-" 不在 ABAP Unit 中执行，由演示程序 ZMSGTRACE_DEMO + SLG1 人工验证。
+" 不在 ABAP Unit 中执行，由 ZMSGTRACE_DEMO + ZMSGTRACE_QUERY 人工验证。
 
-CLASS ltcl_log DEFINITION DEFERRED.
-CLASS zcl_msgtrace DEFINITION LOCAL FRIENDS ltcl_log.
-
-CLASS ltcl_log DEFINITION FINAL FOR TESTING
+CLASS ltcl_msgtrace DEFINITION FINAL FOR TESTING
   RISK LEVEL HARMLESS
   DURATION SHORT.
 
@@ -26,7 +22,7 @@ CLASS ltcl_log DEFINITION FINAL FOR TESTING
 ENDCLASS.
 
 
-CLASS ltcl_log IMPLEMENTATION.
+CLASS ltcl_msgtrace IMPLEMENTATION.
 
   METHOD begin_returns_unique_id.
     DATA(lv_id1) = zcl_msgtrace=>begin( ).
@@ -51,23 +47,21 @@ CLASS ltcl_log IMPLEMENTATION.
 
   METHOD text_is_split_into_msg_vars.
     zcl_msgtrace=>begin( ).
-    zcl_msgtrace=>text( repeat( val = `x` occ = 120 ) ).
-    DATA(ls_entry) = zcl_msgtrace=>gs_buffer-entries[ 1 ].
-    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_entry-msgv1 ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_entry-msgv2 ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 20 act = strlen( ls_entry-msgv3 ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 0  act = strlen( ls_entry-msgv4 ) ).
+    DATA(ls_ret2) = zcl_msgtrace=>text( repeat( val = `x` occ = 120 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_ret2-message_v1 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_ret2-message_v2 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 20 act = strlen( ls_ret2-message_v3 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 0  act = strlen( ls_ret2-message_v4 ) ).
   ENDMETHOD.
 
 
   METHOD text_truncated_at_200_chars.
     zcl_msgtrace=>begin( ).
-    zcl_msgtrace=>text( repeat( val = `y` occ = 250 ) ).
-    DATA(ls_entry) = zcl_msgtrace=>gs_buffer-entries[ 1 ].
-    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_entry-msgv1 ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_entry-msgv2 ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_entry-msgv3 ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_entry-msgv4 ) ).
+    DATA(ls_ret2) = zcl_msgtrace=>text( repeat( val = `y` occ = 250 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_ret2-message_v1 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_ret2-message_v2 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_ret2-message_v3 ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = strlen( ls_ret2-message_v4 ) ).
   ENDMETHOD.
 
 
@@ -85,13 +79,14 @@ CLASS ltcl_log IMPLEMENTATION.
     DO 3 TIMES.
       zcl_msgtrace=>text( 'same message' ).
     ENDDO.
+    DATA(ls_stats) = zcl_msgtrace=>get_stats( ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = ls_stats-entries ).
+    cl_abap_unit_assert=>assert_equals( exp = 3 act = ls_stats-last_repeats ).
+
     zcl_msgtrace=>text( 'different message' ).
-    cl_abap_unit_assert=>assert_equals(
-        exp = 2 act = lines( zcl_msgtrace=>gs_buffer-entries ) ).
-    cl_abap_unit_assert=>assert_equals(
-        exp = 3 act = zcl_msgtrace=>gs_buffer-entries[ 1 ]-repeats ).
-    cl_abap_unit_assert=>assert_equals(
-        exp = 1 act = zcl_msgtrace=>gs_buffer-entries[ 2 ]-repeats ).
+    ls_stats = zcl_msgtrace=>get_stats( ).
+    cl_abap_unit_assert=>assert_equals( exp = 2 act = ls_stats-entries ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = ls_stats-last_repeats ).
   ENDMETHOD.
 
 
@@ -100,11 +95,10 @@ CLASS ltcl_log IMPLEMENTATION.
     DO 250 TIMES.
       zcl_msgtrace=>text( |msg no { sy-index }| ).
     ENDDO.
+    DATA(ls_stats) = zcl_msgtrace=>get_stats( ).
     cl_abap_unit_assert=>assert_equals(
-        exp = zcl_msgtrace=>c_max_entries
-        act = lines( zcl_msgtrace=>gs_buffer-entries ) ).
-    cl_abap_unit_assert=>assert_equals(
-        exp = 50 act = gs_buffer-overflow ).
+        exp = zcl_msgtrace=>c_max_entries act = ls_stats-entries ).
+    cl_abap_unit_assert=>assert_equals( exp = 50 act = ls_stats-overflow ).
   ENDMETHOD.
 
 
@@ -112,13 +106,13 @@ CLASS ltcl_log IMPLEMENTATION.
     zcl_msgtrace=>begin( iv_stack = abap_true ).
     zcl_msgtrace=>text( 'with stack' ).
     cl_abap_unit_assert=>assert_true(
-        act = xsdbool( zcl_msgtrace=>gs_buffer-entries[ 1 ]-stack CS '(' ) ).
+        act = xsdbool( zcl_msgtrace=>get_stats( )-last_stack CS '(' ) ).
 
     zcl_msgtrace=>reset( ).
     zcl_msgtrace=>begin( ).
     zcl_msgtrace=>text( 'without stack' ).
     cl_abap_unit_assert=>assert_equals(
-        exp = `` act = zcl_msgtrace=>gs_buffer-entries[ 1 ]-stack ).
+        exp = `` act = zcl_msgtrace=>get_stats( )-last_stack ).
   ENDMETHOD.
 
 
@@ -131,12 +125,12 @@ CLASS ltcl_log IMPLEMENTATION.
     zcl_msgtrace=>begin( ).
     zcl_msgtrace=>text( 'snap test' ).
     zcl_msgtrace=>snap( iv_name = 'ORDER'
-                   ig_data = VALUE ty_ord( matnr = 'M-1' qty = 3 ) ).
+                        ig_data = VALUE ty_ord( matnr = 'M-1' qty = 3 ) ).
 
-    cl_abap_unit_assert=>assert_equals(
-        exp = 1 act = lines( zcl_msgtrace=>gs_buffer-snaps ) ).
+    DATA(ls_stats) = zcl_msgtrace=>get_stats( ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = ls_stats-snaps ).
     cl_abap_unit_assert=>assert_true(
-        act = xsdbool( zcl_msgtrace=>gs_buffer-snaps[ 1 ]-data_str CS '"MATNR"' ) ).
+        act = xsdbool( ls_stats-last_snap CS '"MATNR"' ) ).
   ENDMETHOD.
 
 

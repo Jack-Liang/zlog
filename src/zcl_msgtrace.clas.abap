@@ -135,6 +135,18 @@ CLASS zcl_msgtrace DEFINITION PUBLIC FINAL CREATE PUBLIC.
     CLASS-METHODS save RETURNING VALUE(rv_log_id) TYPE tv_log_id.
 
     CLASS-METHODS get_id RETURNING VALUE(rv_log_id) TYPE tv_log_id.
+
+    " 会话内省（单元测试 / 监控用）：当前缓冲状态快照
+    TYPES: BEGIN OF ty_stats,
+             entries      TYPE i,      " 已缓冲条目数
+             last_repeats TYPE i,      " 最新条目重复次数（量控）
+             overflow     TYPE i,      " 超上限丢弃数
+             snaps        TYPE i,      " 快照数
+             last_stack   TYPE string, " 最新条目调用链（未开启为空）
+             last_snap    TYPE string, " 最新快照 JSON
+           END OF ty_stats.
+
+    CLASS-METHODS get_stats RETURNING VALUE(rs_stats) TYPE ty_stats.
     " 最近一次保存的日志 ID（save 后 get_id 已清空时的取值口）
     CLASS-METHODS get_last_id RETURNING VALUE(rv_log_id) TYPE tv_log_id.
     CLASS-METHODS is_active RETURNING VALUE(rv_active) TYPE abap_bool.
@@ -419,6 +431,21 @@ CLASS zcl_msgtrace IMPLEMENTATION.
 
   METHOD get_last_id.
     rv_log_id = gv_last_id.
+  ENDMETHOD.
+
+
+  METHOD get_stats.
+    rs_stats-entries      = lines( gs_buffer-entries ).
+    rs_stats-overflow     = gs_buffer-overflow.
+    rs_stats-snaps        = lines( gs_buffer-snaps ).
+    IF gs_buffer-entries IS NOT INITIAL.
+      DATA(ls_last) = gs_buffer-entries[ lines( gs_buffer-entries ) ].
+      rs_stats-last_repeats = ls_last-repeats.
+      rs_stats-last_stack   = ls_last-stack.
+    ENDIF.
+    IF gs_buffer-snaps IS NOT INITIAL.
+      rs_stats-last_snap = gs_buffer-snaps[ lines( gs_buffer-snaps ) ]-data_str.
+    ENDIF.
   ENDMETHOD.
 
 
