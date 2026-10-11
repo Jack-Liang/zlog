@@ -4,11 +4,19 @@
   <asx:values>
    <PROGDIR>
     <NAME>ZMSGTRACE_DEMO</NAME>
+    <DBAPL>S</DBAPL>
     <SUBC>1</SUBC>
-    <RLOAD>E</RLOAD>
     <FIXPT>X</FIXPT>
+    <LDBNAME>D$S</LDBNAME>
     <UCCHECK>X</UCCHECK>
    </PROGDIR>
+   <TPOOL>
+    <item>
+     <ID>R</ID>
+     <ENTRY>ZMSGTRACE_DEMO (ZMSGTRACE)</ENTRY>
+     <LENGTH>26</LENGTH>
+    </item>
+   </TPOOL>
   </asx:values>
  </asx:abap>
 </abapGit>

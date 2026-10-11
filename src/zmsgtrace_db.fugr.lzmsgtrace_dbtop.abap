@@ -1,3 +1,3 @@
-* 函数组 ZMSGTRACE_DB：独立 LUW 日志持久化（配合 ZCL_MSGTRACE）
-* 接口全部使用标准 DDIC 类型（BAPIRET2 等），无自建 DDIC 对象
-FUNCTION-POOL zmsgtrace_db.
+FUNCTION-POOL ZMSGTRACE_DB.                 "MESSAGE-ID ..
+
+* INCLUDE LZMSGTRACE_DBD...                  " Local class definition

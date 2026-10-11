@@ -13,8 +13,8 @@
    <TPOOL>
     <item>
      <ID>R</ID>
-     <ENTRY>ZLOG baseline scan: find raw message points per package</ENTRY>
-     <LENGTH>55</LENGTH>
+     <ENTRY>ZMSGTRACE_SCAN (ZMSGTRACE)</ENTRY>
+     <LENGTH>26</LENGTH>
     </item>
    </TPOOL>
   </asx:values>

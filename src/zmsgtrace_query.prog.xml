@@ -6,7 +6,6 @@
     <NAME>ZMSGTRACE_QUERY</NAME>
     <DBAPL>S</DBAPL>
     <SUBC>1</SUBC>
-    <RSTAT>A</RSTAT>
     <FIXPT>X</FIXPT>
     <LDBNAME>D$S</LDBNAME>
     <UCCHECK>X</UCCHECK>
@@ -14,8 +13,8 @@
    <TPOOL>
     <item>
      <ID>R</ID>
-     <ENTRY>ZLOG query report: search by log id, double-click trace line to jump t</ENTRY>
-     <LENGTH>70</LENGTH>
+     <ENTRY>ZMSGTRACE_QUERY (ZMSGTRACE)</ENTRY>
+     <LENGTH>27</LENGTH>
     </item>
    </TPOOL>
   </asx:values>
