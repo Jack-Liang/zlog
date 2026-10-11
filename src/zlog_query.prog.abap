@@ -19,12 +19,15 @@ PARAMETERS:
 
 DATA: gv_from TYPE sydatum.
 
-INITIALIZATION.
-  gv_from = sy-datum - 30.            " 默认查最近 30 天
-
 SELECT-OPTIONS:
   s_user  FOR sy-uname,
-  s_date  FOR sy-datum OBLIGATORY DEFAULT gv_from.
+  s_date  FOR sy-datum OBLIGATORY.
+
+INITIALIZATION.
+  " 默认完整区间：最近 30 天（DEFAULT 只填下限，屏幕观感不完整）
+  s_date[] = VALUE #( ( sign = 'I' option = 'BT'
+                        low  = sy-datum - 30
+                        high = sy-datum ) ).
 
 
 CLASS lcl_events DEFINITION FINAL.
