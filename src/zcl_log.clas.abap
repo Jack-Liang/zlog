@@ -103,6 +103,20 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         iv_subobject TYPE balsubobj DEFAULT c_subobject_err
       RETURNING VALUE(rv_text) TYPE string.
 
+    " 一步式双字段版（B3）：msgtx 干净文本 + logid 分离返回，一次调用直填两个字段
+    "   zcl_log=>log_parts( EXPORTING iv_text = |...|
+    "                       IMPORTING ev_text = ls_return-msgtx
+    "                                 ev_log_id = ls_return-logid ).
+    CLASS-METHODS log_parts
+      IMPORTING
+        iv_text      TYPE clike
+        iv_msgty     TYPE sy-msgty DEFAULT 'E'
+        it_ctx       TYPE ty_ctx_t OPTIONAL
+        iv_subobject TYPE balsubobj DEFAULT c_subobject_err
+      EXPORTING
+        ev_text      TYPE string
+        ev_log_id    TYPE tv_log_id.
+
     " 保存并关闭会话。独立 LUW 模式下不受调用方后续 ROLLBACK 影响
     CLASS-METHODS save RETURNING VALUE(rv_log_id) TYPE tv_log_id.
 
@@ -268,6 +282,20 @@ CLASS zcl_log IMPLEMENTATION.
                        iv_msgty     = iv_msgty
                        it_ctx       = it_ctx
                        iv_subobject = iv_subobject )-message.
+  ENDMETHOD.
+
+
+  METHOD log_parts.
+    DATA(ls_ret2) = log_now( iv_text      = iv_text
+                             iv_msgty     = iv_msgty
+                             it_ctx       = it_ctx
+                             iv_subobject = iv_subobject ).
+    " 从 ret2 的消息键重渲染 = 不带 " (log ID)" 后缀的干净文本
+    MESSAGE ID ls_ret2-id TYPE 'I' NUMBER ls_ret2-number
+            WITH ls_ret2-message_v1 ls_ret2-message_v2
+                 ls_ret2-message_v3 ls_ret2-message_v4
+            INTO ev_text.
+    ev_log_id = ls_ret2-log_no.
   ENDMETHOD.
 
 
