@@ -92,6 +92,17 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         iv_subobject TYPE balsubobj DEFAULT c_subobject_err
       RETURNING VALUE(rs_ret2) TYPE bapiret2.
 
+    " 一步式纯文本版：返回值直接赋给 msgtx（尾部带 log ID）
+    " 存量迁移一行替换：ls_return-msgtx = zcl_log=>text_now( |...| ).
+    " 需要类型/LOG_NO 字段时用 log_now
+    CLASS-METHODS text_now
+      IMPORTING
+        iv_text      TYPE clike
+        iv_msgty     TYPE sy-msgty DEFAULT 'E'
+        it_ctx       TYPE ty_ctx_t OPTIONAL
+        iv_subobject TYPE balsubobj DEFAULT c_subobject_err
+      RETURNING VALUE(rv_text) TYPE string.
+
     " 保存并关闭会话。独立 LUW 模式下不受调用方后续 ROLLBACK 影响
     CLASS-METHODS save RETURNING VALUE(rv_log_id) TYPE tv_log_id.
 
@@ -249,6 +260,14 @@ CLASS zcl_log IMPLEMENTATION.
       CATCH cx_root ##NO_HANDLER.    " 部分异常（如恢复的异常）无源码位置
     ENDTRY.
     rs_ret2 = add_entry( ls_entry ).
+  ENDMETHOD.
+
+
+  METHOD text_now.
+    rv_text = log_now( iv_text      = iv_text
+                       iv_msgty     = iv_msgty
+                       it_ctx       = it_ctx
+                       iv_subobject = iv_subobject )-message.
   ENDMETHOD.
 
 
