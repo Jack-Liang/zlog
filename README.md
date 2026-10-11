@@ -57,6 +57,7 @@ zcl_msgtrace=>save( ).
 - **ID 即返回**：`begin( )` 生成 20 位 ID（C22 UUID 截前 20——BAPIRET2-LOG_NO 只有 char20，22 位会被静默截断）写入 BAL 外部编号，未保存也可返回给前台；与 BAL 的 LOGNUMBER 解耦。
 - **默认独立 LUW**（`c_save_indep`）：保存走 `ZMSGTRACE_SAVE_RFC` RFC 'NONE'，调用方随后 ROLLBACK 也丢不了错误日志。`c_save_luw`（随 LUW）仅供 TRACE 类低价值日志。
 - **位置采集**：`msg/text` 记录调用者帧（`SYSTEM_CALLSTACK` 按 include 过滤 `ZCL_MSGTRACE` 帧，非固定深度）；`exception` 用 `cx_root->get_source_position` 记录 RAISE 点。位置与业务键以**追溯行**入库：每条消息后追加一条 I 级消息 `at INCL line N; K=V; K=V`（816 上 BAL 消息参数要求 ALTEXT/CALLBACK，裸参数报 BL205，故弃用）。
+- **行号漂移对策**：行号只在记录时的代码版本下精确，include 改动后旧日志的行号会漂。追溯行同时记两个"锚"：`line N/M`（M = 记录时 include 总行数，M 对不上即知已漂）+ 语句摘录（记录时该行源码 condense 后前 40 字符，`at INCL line N/M: lv_qty > lv_max; K=V`）——行号会漂，语句文本不漂。include 被删/行号越界时自动降级为纯行号。
 - **量控（D3）**：同文本同位置的连续重复自动合并，追溯行标注总次数（`at INCL line N x5`）；单日志上限 `c_max_entries`（默认 200），超出只计数并在保存时补一条 W 级提示。循环里刷消息不再撑爆日志。
 - **调用链（A6，可开关）**：`begin( iv_stack = abap_true )` 后每条目额外落一条 `stack: INCL(行) <- INCL(行)...`（直接调用方之后的 4 帧），排查深层嵌套路径用；默认关闭省日志量。
 - **保留期（D5）**：落库时按子对象写 BAL 头原生字段 `ALDATE_DEL`（ERR 90 / AUDIT 365 / TRACE 14 天，常量 `c_retention_*`），SLG2 清理作业自动尊重——保留策略跟着数据走。

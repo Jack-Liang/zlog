@@ -204,6 +204,10 @@ CLASS zcl_msgtrace DEFINITION PUBLIC FINAL CREATE PUBLIC.
         RETURNING VALUE(rs_ret2) TYPE bapiret2,
       caller_position
         RETURNING VALUE(rs_pos) TYPE ty_position,
+      build_position_tag
+        IMPORTING iv_include TYPE clike
+                  iv_line    TYPE i
+        RETURNING VALUE(rv_tag) TYPE string,
       build_stack
         RETURNING VALUE(rv_stack) TYPE string,
       snap_serialize
@@ -600,10 +604,40 @@ CLASS zcl_msgtrace IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD build_position_tag.
+    " 追溯行 "at INCL line N/M: <语句摘录>" 的 line 段（行号漂移对策）：
+    "   M    = 记录时 include 总行数——代码改动后 M 对不上，一眼识别旧行号已漂
+    "   摘录 = 当期该行源码（condense 后取前 40 字符）——行号会漂，语句文本不漂
+    " include 已改名/删除或行号越界时降级为纯行号（与旧格式兼容）
+    DATA lt_src TYPE string_table.
+    rv_tag = |line { iv_line }|.
+
+    IF iv_include IS INITIAL OR iv_line <= 0.
+      RETURN.
+    ENDIF.
+
+    READ REPORT iv_include INTO lt_src.
+    IF sy-subrc <> 0.
+      RETURN.                             " include 已不存在：只剩纯行号
+    ENDIF.
+
+    rv_tag = |line { iv_line }/{ lines( lt_src ) }|.
+
+    IF iv_line <= lines( lt_src ).
+      DATA(lv_stmt) = condense( lt_src[ iv_line ] ).
+      IF lv_stmt IS NOT INITIAL.
+        rv_tag = |{ rv_tag }: { substring( val = lv_stmt
+                                          len  = nmin( val1 = 40 val2 = strlen( lv_stmt ) ) ) }|.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+
   METHOD build_transport_tables.
     " 复用标准结构 BAPIRET2 传输（避免自建 DDIC），每条目两行：
     "   本体行：TYPE/ID/NUMBER/MESSAGE_V1..4 = 消息本身
-    "   追溯行：TYPE='I' ID='ZMSGTRACE'，文本 = "at INCL line N; K=V; K=V"
+    "   追溯行：TYPE='I' ID='ZMSGTRACE'，
+    "          文本 = "at INCL line N/M: 语句摘录; K=V; K=V"（N/M 与摘录见 build_position_tag）
     " （不用 BAL 消息参数：816 要求 ALTEXT/CALLBACK，裸参数报 BL205）
     LOOP AT gs_buffer-entries INTO DATA(ls_entry).
       APPEND VALUE bapiret2( type       = ls_entry-msgty
@@ -616,7 +650,8 @@ CLASS zcl_msgtrace IMPLEMENTATION.
                              log_no     = |{ sy-tabix }| ) TO et_msgs.
 
       DATA lv_trace TYPE string.
-      lv_trace = |at { ls_entry-pos-include } line { ls_entry-pos-line }|.
+      lv_trace = |at { ls_entry-pos-include } { build_position_tag( iv_include = ls_entry-pos-include
+                                                                    iv_line    = ls_entry-pos-line ) }|.
       IF ls_entry-repeats > 1.          " 降噪计数（量控 D3）
         lv_trace = |{ lv_trace } x{ ls_entry-repeats }|.
       ENDIF.
