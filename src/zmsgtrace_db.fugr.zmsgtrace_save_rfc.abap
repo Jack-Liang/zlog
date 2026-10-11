@@ -17,7 +17,7 @@ FUNCTION zmsgtrace_save_rfc.
 *
 * IV_PAYLOAD 为数据簇（EXPORT msgs ... TO DATA BUFFER），一张 bapirettab 表：
 *   行 = 消息本身（TYPE/ID/NUMBER/MESSAGE_V1..4）；每条目两行——
-*   本体行 + I 级追溯行（"at INCL line N; K=V"，由编码方拼接）
+*   本体行 + I 级追溯行（"at INCL line N/M: 语句摘录; K=V"，由编码方拼接）
 * （编码方：ZCL_MSGTRACE=>build_transport_tables；纯消息路径，无 BAL 参数）
 
   TYPES: BEGIN OF ty_snap,              " A8 快照（与 ZCL_MSGTRACE=>ty_snap 布局一致）

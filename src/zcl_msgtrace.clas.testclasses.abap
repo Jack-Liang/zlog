@@ -17,6 +17,9 @@ CLASS ltcl_msgtrace DEFINITION FINAL FOR TESTING
       overflow_capped FOR TESTING,
       stack_recorded_when_enabled FOR TESTING,
       snap_serializes_json FOR TESTING,
+      ctx_recorded_on_text FOR TESTING,
+      different_ctx_not_collapsed FOR TESTING,
+      log_same_line IMPORTING matnr TYPE clike,
       teardown.
 
 ENDCLASS.
@@ -131,6 +134,40 @@ CLASS ltcl_msgtrace IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = 1 act = ls_stats-snaps ).
     cl_abap_unit_assert=>assert_true(
         act = xsdbool( ls_stats-last_snap CS '"MATNR"' ) ).
+  ENDMETHOD.
+
+
+  METHOD ctx_recorded_on_text.                 " it_ctx 必须随条目记录（曾整族丢失）
+    zcl_msgtrace=>begin( ).
+    zcl_msgtrace=>text( iv_text = 'ctx test'
+                        it_ctx  = VALUE #( ( name = 'MATNR' value = '4711' ) ) ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 'MATNR=4711' act = zcl_msgtrace=>get_stats( )-last_ctx ).
+
+    zcl_msgtrace=>reset( ).
+    zcl_msgtrace=>begin( ).
+    zcl_msgtrace=>msg( iv_msgid = 'ZMSGTRACE' iv_msgno = '001'
+                       it_ctx   = VALUE #( ( name = 'VBELN' value = '0001' ) ) ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 'VBELN=0001' act = zcl_msgtrace=>get_stats( )-last_ctx ).
+  ENDMETHOD.
+
+
+  METHOD different_ctx_not_collapsed.          " 量控不得把不同业务键并成一条
+    zcl_msgtrace=>begin( ).
+    log_same_line( 'M1' ).
+    log_same_line( 'M2' ).
+    DATA(ls_stats) = zcl_msgtrace=>get_stats( ).
+    cl_abap_unit_assert=>assert_equals( exp = 2 act = ls_stats-entries ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = ls_stats-last_repeats ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 'MATNR=M2' act = ls_stats-last_ctx ).
+  ENDMETHOD.
+
+
+  METHOD log_same_line.                        " 同一行调 text，保证调用位置一致
+    zcl_msgtrace=>text( iv_text = '物料不存在'
+                        it_ctx  = VALUE #( ( name = 'MATNR' value = matnr ) ) ).
   ENDMETHOD.
 
 

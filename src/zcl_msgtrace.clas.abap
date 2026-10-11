@@ -142,6 +142,7 @@ CLASS zcl_msgtrace DEFINITION PUBLIC FINAL CREATE PUBLIC.
              last_repeats TYPE i,      " 最新条目重复次数（量控）
              overflow     TYPE i,      " 超上限丢弃数
              snaps        TYPE i,      " 快照数
+             last_ctx     TYPE string, " 最新条目上下文渲染 "K=V; K=V"（无则空）
              last_stack   TYPE string, " 最新条目调用链（未开启为空）
              last_snap    TYPE string, " 最新快照 JSON
            END OF ty_stats.
@@ -218,9 +219,10 @@ CLASS zcl_msgtrace DEFINITION PUBLIC FINAL CREATE PUBLIC.
         IMPORTING iv_log_id TYPE tv_log_id,
       retention_days
         RETURNING VALUE(rv_days) TYPE i,
-      split_text
-        IMPORTING iv_text  TYPE clike
-        CHANGING  cs_entry TYPE ty_entry,
+      ctx_equals
+        IMPORTING it_a          TYPE ty_ctx_t
+                  it_b          TYPE ty_ctx_t
+        RETURNING VALUE(rv_eq)  TYPE abap_bool,
       split_to_vars
         IMPORTING iv_text TYPE clike
         EXPORTING ev_v1   TYPE symsgv
@@ -280,6 +282,7 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     ls_entry-msgv2 = iv_msgv2.
     ls_entry-msgv3 = iv_msgv3.
     ls_entry-msgv4 = iv_msgv4.
+    ls_entry-ctx   = it_ctx.
     ls_entry-pos   = caller_position( ).
     IF gs_buffer-stack_mode = abap_true.
       ls_entry-stack = build_stack( ).
@@ -294,7 +297,10 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     ls_entry-msgty = iv_msgty.
     ls_entry-msgid = c_msgclass_txt.
     ls_entry-msgno = c_txtno_txt.
-    split_text( EXPORTING iv_text = iv_text CHANGING cs_entry = ls_entry ).
+    ls_entry-ctx   = it_ctx.
+    split_to_vars( EXPORTING iv_text = iv_text
+                   IMPORTING ev_v1 = ls_entry-msgv1 ev_v2 = ls_entry-msgv2
+                             ev_v3 = ls_entry-msgv3 ev_v4 = ls_entry-msgv4 ).
     ls_entry-pos = caller_position( ).
     IF gs_buffer-stack_mode = abap_true.
       ls_entry-stack = build_stack( ).
@@ -322,8 +328,10 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     ls_entry-msgty = iv_msgty.
     ls_entry-msgid = c_msgclass_txt.
     ls_entry-msgno = c_txtno_txt.
-    split_text( EXPORTING iv_text = ix_ex->get_text( )
-                CHANGING cs_entry = ls_entry ).
+    ls_entry-ctx   = it_ctx.
+    split_to_vars( EXPORTING iv_text = ix_ex->get_text( )
+                   IMPORTING ev_v1 = ls_entry-msgv1 ev_v2 = ls_entry-msgv2
+                             ev_v3 = ls_entry-msgv3 ev_v4 = ls_entry-msgv4 ).
     TRY.
         ix_ex->get_source_position(
           IMPORTING program_name = ls_entry-pos-mainprogram
@@ -398,19 +406,22 @@ CLASS zcl_msgtrace IMPLEMENTATION.
 
 
   METHOD log_now.
+    " it_ctx 只传 begin（base_ctx 自动挂到每条）；再传 text 会造成追溯行 K=V 双份
     begin( iv_subobject = iv_subobject it_ctx = it_ctx ).
-    rs_ret2 = text( iv_text = iv_text iv_msgty = iv_msgty it_ctx = it_ctx ).
+    rs_ret2 = text( iv_text = iv_text iv_msgty = iv_msgty ).
     save( ).
   ENDMETHOD.
 
 
   METHOD save.
     rv_log_id = gs_buffer-log_id.
-    gv_last_id = gs_buffer-log_id.
-    IF gs_buffer-log_id IS INITIAL OR gs_buffer-entries IS INITIAL.
+    " 无条目也无快照 = 没有可保存内容；此时不更新"最近保存 ID"，避免悬空 ID
+    IF gs_buffer-log_id IS INITIAL
+       OR ( gs_buffer-entries IS INITIAL AND gs_buffer-snaps IS INITIAL ).
       CLEAR gs_buffer.
       RETURN.
     ENDIF.
+    gv_last_id = gs_buffer-log_id.
     IF gs_buffer-overflow > 0.          " 超上限丢弃提示（量控 D3）
       APPEND VALUE ty_entry(
           msgty = 'W'
@@ -446,6 +457,12 @@ CLASS zcl_msgtrace IMPLEMENTATION.
       DATA(ls_last) = gs_buffer-entries[ lines( gs_buffer-entries ) ].
       rs_stats-last_repeats = ls_last-repeats.
       rs_stats-last_stack   = ls_last-stack.
+      LOOP AT ls_last-ctx INTO DATA(ls_c).
+        IF rs_stats-last_ctx IS NOT INITIAL.
+          rs_stats-last_ctx = |{ rs_stats-last_ctx }; |.
+        ENDIF.
+        rs_stats-last_ctx = |{ rs_stats-last_ctx }{ ls_c-name }={ ls_c-value }|.
+      ENDLOOP.
     ENDIF.
     IF gs_buffer-snaps IS NOT INITIAL.
       rs_stats-last_snap = gs_buffer-snaps[ lines( gs_buffer-snaps ) ]-data_str.
@@ -476,6 +493,7 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     " 2) 上限——超过 c_max_entries 不再缓冲，只计数；消息本身照常返回调用方
     IF lines( gs_buffer-entries ) > 0.
       DATA(ls_last) = gs_buffer-entries[ lines( gs_buffer-entries ) ].
+      " 上下文不同（如循环里不同物料号）不算重复——业务键必须各自保留
       IF ls_last-msgty = is_entry-msgty
          AND ls_last-msgid = is_entry-msgid
          AND ls_last-msgno = is_entry-msgno
@@ -484,7 +502,8 @@ CLASS zcl_msgtrace IMPLEMENTATION.
          AND ls_last-msgv3 = is_entry-msgv3
          AND ls_last-msgv4 = is_entry-msgv4
          AND ls_last-pos-include = is_entry-pos-include
-         AND ls_last-pos-line = is_entry-pos-line.
+         AND ls_last-pos-line = is_entry-pos-line
+         AND ctx_equals( it_a = ls_last-ctx it_b = is_entry-ctx ).
         gs_buffer-entries[ lines( gs_buffer-entries ) ]-repeats =
             gs_buffer-entries[ lines( gs_buffer-entries ) ]-repeats + 1.
         rs_ret2 = build_ret2( is_entry ).
@@ -551,18 +570,6 @@ CLASS zcl_msgtrace IMPLEMENTATION.
       WHEN OTHERS.
         rv_days = c_retention_err.
     ENDCASE.
-  ENDMETHOD.
-
-
-  METHOD split_text.
-    " 正文拆 4 x 50 进 ZMSGTRACE 001 的 &1&2&3&4，超长部分截断
-    DATA lv_text TYPE string.
-    lv_text = iv_text.
-    split_to_vars( EXPORTING iv_text = lv_text
-                   IMPORTING ev_v1 = cs_entry-msgv1
-                             ev_v2 = cs_entry-msgv2
-                             ev_v3 = cs_entry-msgv3
-                             ev_v4 = cs_entry-msgv4 ).
   ENDMETHOD.
 
 
@@ -650,8 +657,12 @@ CLASS zcl_msgtrace IMPLEMENTATION.
                              log_no     = |{ sy-tabix }| ) TO et_msgs.
 
       DATA lv_trace TYPE string.
-      lv_trace = |at { ls_entry-pos-include } { build_position_tag( iv_include = ls_entry-pos-include
-                                                                    iv_line    = ls_entry-pos-line ) }|.
+      IF ls_entry-pos-include IS NOT INITIAL.
+        lv_trace = |at { ls_entry-pos-include } { build_position_tag( iv_include = ls_entry-pos-include
+                                                                       iv_line    = ls_entry-pos-line ) }|.
+      ELSE.
+        lv_trace = 'at ?'.                 " 位置不可得（如无源码位置的异常），不给误导行号
+      ENDIF.
       IF ls_entry-repeats > 1.          " 降噪计数（量控 D3）
         lv_trace = |{ lv_trace } x{ ls_entry-repeats }|.
       ENDIF.
@@ -776,8 +787,21 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     " 后续演进：内部错误轨迹（参考 abap-cloud-logger 的 error trail）
   ENDMETHOD.
 
+
+  METHOD ctx_equals.
+    " 量控 D3 的重复判定辅助：上下文名值对完全一致才算同一上下文
+    rv_eq = xsdbool( lines( it_a ) = lines( it_b ) ).
+    IF rv_eq = abap_false.
+      RETURN.
+    ENDIF.
+    LOOP AT it_a INTO DATA(ls_a).
+      READ TABLE it_b TRANSPORTING NO FIELDS
+           WITH KEY name = ls_a-name value = ls_a-value.
+      IF sy-subrc <> 0.
+        rv_eq = abap_false.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
 ENDCLASS.
-
-
-
-

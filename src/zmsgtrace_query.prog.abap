@@ -220,8 +220,9 @@ FORM search_and_display.
     MESSAGE '日志加载失败' TYPE 'E'.
   ENDIF.
 
+  " bal_t_logh 是排序表：APPEND 乱序会 ITAB_ILLEGAL_SORT_ORDER dump，必须 INSERT
   LOOP AT lt_headers ASSIGNING <ls_hdr>.
-    APPEND <ls_hdr>-log_handle TO lt_logh.
+    INSERT <ls_hdr>-log_handle INTO TABLE lt_logh.
   ENDLOOP.
 
   CALL FUNCTION 'BAL_GLB_SEARCH_MSG'
