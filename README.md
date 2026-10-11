@@ -56,7 +56,15 @@ zcl_log=>save( ).
 
 ## 出口接法（存量系统 B1/B2）
 
-在 msgty/msgtx 汇合的出口（OData 错误返回 / 表单 / ALV / 接口封装，通常全系统 2~5 处）：
+存量迁移的一行式写法（`text_now` 直接返回文本，尾部带 log ID）：
+
+```abap
+" 原来：ls_return-msgtx = |物料 { lv_matnr } 不存在|.
+ls_return-msgty = 'E'.                                              " 照常
+ls_return-msgtx = zcl_log=>text_now( |物料 { lv_matnr } 不存在| ).  " 就地替换
+```
+
+需要类型/LOG_NO 字段时用 `log_now`（返回 bapiret2）。在 msgty/msgtx 汇合的出口（OData 错误返回 / 表单 / ALV / 接口封装，通常全系统 2~5 处）：
 
 ```abap
 IF ls_return-msgty CA 'EA'.
