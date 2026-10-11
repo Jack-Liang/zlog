@@ -18,7 +18,8 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
   PUBLIC SECTION.
 
     TYPES:
-      tv_log_id    TYPE sysuuid-c22,
+      " ID 定长 20：BAPIRET2-LOG_NO 仅 char20，22 位 UUID 会静默截断导致下游残缺
+      tv_log_id    TYPE c LENGTH 20,
       tv_save_mode TYPE c LENGTH 1,
       BEGIN OF ty_ctx,
         name  TYPE c LENGTH 30,   " 建议 <= 20，BAL 消息参数名最长 20
@@ -163,11 +164,12 @@ CLASS zcl_log IMPLEMENTATION.
     ENDIF.
     CLEAR gs_buffer.
     TRY.
-        gs_buffer-log_id = cl_system_uuid=>if_system_uuid_static~create_uuid_c22( ).
+        DATA(lv_uuid) = cl_system_uuid=>if_system_uuid_static~create_uuid_c22( ).
+        gs_buffer-log_id = lv_uuid(20).
       CATCH cx_uuid_error ##NO_HANDLER.
     ENDTRY.
     IF gs_buffer-log_id IS INITIAL.
-      gs_buffer-log_id = |{ sy-datum DATE = ISO }{ sy-uzeit }|.  " 兜底 17 位
+      gs_buffer-log_id = |{ sy-datum DATE = ISO }{ sy-uzeit }|.  " 兜底 16 位
     ENDIF.
     gs_buffer-subobject  = COND #( WHEN iv_subobject IS INITIAL
                                    THEN c_subobject_err ELSE iv_subobject ).
