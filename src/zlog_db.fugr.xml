@@ -50,7 +50,7 @@
      </TABLES>
      <EXCEPTION>
       <RSEXC>
-       <PARAMETER>SAVE_FAILED</PARAMETER>
+       <EXCEPTION>SAVE_FAILED</EXCEPTION>
       </RSEXC>
      </EXCEPTION>
     </item>
