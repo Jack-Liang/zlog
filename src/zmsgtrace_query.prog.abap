@@ -21,13 +21,16 @@ DATA: gv_from TYPE sydatum.
 
 SELECT-OPTIONS:
   s_user  FOR sy-uname,
-  s_date  FOR sy-datum OBLIGATORY.
+  s_date  FOR sy-datum OBLIGATORY,
+  s_time  FOR sy-uzeit.               " 时间窗（缩窄加载量）
 
 INITIALIZATION.
-  " 默认完整区间：最近 30 天（DEFAULT 只填下限，屏幕观感不完整）
+  " 默认完整区间：最近 30 天 + 全天 00:00~23:59
   s_date[] = VALUE #( ( sign = 'I' option = 'BT'
                         low  = sy-datum - 30
                         high = sy-datum ) ).
+  s_time[] = VALUE #( ( sign = 'I' option = 'BT'
+                        low = '000000' high = '235959' ) ).
 
 
 CLASS lcl_events DEFINITION FINAL.
@@ -120,10 +123,15 @@ FORM search_and_display.
   ENDIF.
   ls_filter-aluser[] = s_user[].
   ls_filter-date_time-date_from = s_date-low.
+  ls_filter-date_time-time_from = COND #( WHEN s_time-low IS NOT INITIAL
+                                          THEN s_time-low ELSE '000000' ).
   ls_filter-date_time-date_to   = s_date-high.
   IF ls_filter-date_time-date_to IS INITIAL.
     ls_filter-date_time-date_to = sy-datum.
   ENDIF.
+  " 时间上界默认 23:59:59——留空 = 00:00:00 会把"当天"的日志全部排除
+  ls_filter-date_time-time_to   = COND #( WHEN s_time-high IS NOT INITIAL
+                                          THEN s_time-high ELSE '235959' ).
   ls_filter-max_nr_logs = p_rows.
 
   CALL FUNCTION 'BAL_DB_SEARCH'
