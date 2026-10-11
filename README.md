@@ -12,6 +12,7 @@
 | Z_LOG_SAVE_RFC / FUGR ZLOG_DB | RFC 函数 | 独立 LUW 持久化（DESTINATION 'NONE'） |
 | ZLOG_DEMO | 程序 | 演示 + 验收脚本 |
 | ZLOG_QUERY | 程序 | 查询报表：ID/日期/用户检索 + 双击追溯行跳源码（阶段2 C2/C3） |
+| ZLOG_SCAN | 程序 | 基线扫描：按包找未走 ZCL_LOG 的裸消息点，输出热点清单（E1） |
 | SLG0 对象 ZLOG（子对象 ERROR/AUDIT/TRACE） | 定制 | **手工配置**，见下 |
 | 消息类 ZLOG 001 = `&1&2&3&4` | SE91 | **手工配置**，自由文本载体 |
 
@@ -46,9 +47,10 @@ zcl_log=>save( ).
 
 **设计要点**：
 
-- **ID 即返回**：`begin( )` 生成 UUID（C22）写入 BAL 外部编号，未保存也可返回给前台；与 BAL 的 LOGNUMBER 解耦。
+- **ID 即返回**：`begin( )` 生成 20 位 ID（C22 UUID 截前 20——BAPIRET2-LOG_NO 只有 char20，22 位会被静默截断）写入 BAL 外部编号，未保存也可返回给前台；与 BAL 的 LOGNUMBER 解耦。
 - **默认独立 LUW**（`c_save_indep`）：保存走 `Z_LOG_SAVE_RFC` RFC 'NONE'，调用方随后 ROLLBACK 也丢不了错误日志。`c_save_luw`（随 LUW）仅供 TRACE 类低价值日志。
 - **位置采集**：`msg/text` 记录调用者帧（`SYSTEM_CALLSTACK` 按 include 过滤 `ZCL_LOG` 帧，非固定深度）；`exception` 用 `cx_root->get_source_position` 记录 RAISE 点。位置与业务键以**追溯行**入库：每条消息后追加一条 I 级消息 `at INCL line N; K=V; K=V`（816 上 BAL 消息参数要求 ALTEXT/CALLBACK，裸参数报 BL205，故弃用）。
+- **量控（D3）**：同文本同位置的连续重复自动合并，追溯行标注总次数（`at INCL line N x5`）；单日志上限 `c_max_entries`（默认 200），超出只计数并在保存时补一条 W 级提示。循环里刷消息不再撑爆日志。
 - `capture( )` 记录的是捕获点位置，不是原始 raise 点——尽量在错误传播必经之路调用。
 - 上下文名值对：name ≤ 20、value ≤ 50（BAL 消息参数宽度）。**不要记录敏感明文**。
 
@@ -85,7 +87,7 @@ SLG2 按对象+子对象+日期范围建后台作业（每月跑一次，删 N-�
 
 ## 基线扫描（存量改造 E1）
 
-`RS_ABAP_SOURCE_SCAN`（或 ADT 全局搜索）：包 = 自研包，查找串 `msgtx`、`MESSAGE` + 限定 `INTO`，导出清单即报错点全集。出口兜底运行一个月后，按 SLG1 中出现频率排出热点，逐批替换为 `zcl_log=>msg( )`；新代码规约：禁止不经 ZCL_LOG 的裸消息（后续加 ATC 检查）。
+运行 `ZLOG_SCAN`（SA38）：包 = 目标自研包，默认模式 `MESSAGE` / `msgtx`（可改），扫 PROG/函数 include/类方法 include，跳过含 `ZCL_LOG` 的行，输出"裸消息点"候选清单（含误报需人工确认，上限默认 500 条）。出口兜底运行一个月后，按 SLG1/ZLOG_QUERY 中出现频率排出热点，逐批替换为 `zcl_log=>msg( )`；新代码规约：禁止不经 ZCL_LOG 的裸消息（后续加 ATC 检查）。
 
 ## 已知限制（MVP 范围内接受）
 

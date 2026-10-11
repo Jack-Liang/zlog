@@ -16,6 +16,8 @@ CLASS ltcl_log DEFINITION FINAL FOR TESTING
       text_is_split_into_msg_vars FOR TESTING,
       text_truncated_at_200_chars FOR TESTING,
       auto_begin_when_missing FOR TESTING,
+      duplicates_collapsed FOR TESTING,
+      overflow_capped FOR TESTING,
       teardown.
 
 ENDCLASS.
@@ -72,6 +74,34 @@ CLASS ltcl_log IMPLEMENTATION.
     zcl_log=>text( '未显式 begin 也应能记录' ).
     cl_abap_unit_assert=>assert_true( zcl_log=>is_active( ) ).
     cl_abap_unit_assert=>assert_not_initial( zcl_log=>get_id( ) ).
+  ENDMETHOD.
+
+
+  METHOD duplicates_collapsed.                 " 量控 D3：降噪
+    zcl_log=>begin( ).
+    DO 3 TIMES.
+      zcl_log=>text( 'same message' ).
+    ENDDO.
+    zcl_log=>text( 'different message' ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 2 act = lines( zcl_log=>gs_buffer-entries ) ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 3 act = zcl_log=>gs_buffer-entries[ 1 ]-repeats ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 1 act = zcl_log=>gs_buffer-entries[ 2 ]-repeats ).
+  ENDMETHOD.
+
+
+  METHOD overflow_capped.                      " 量控 D3：上限保护
+    zcl_log=>begin( ).
+    DO 250 TIMES.
+      zcl_log=>text( |msg no { sy-index }| ).
+    ENDDO.
+    cl_abap_unit_assert=>assert_equals(
+        exp = zcl_log=>c_max_entries
+        act = lines( zcl_log=>gs_buffer-entries ) ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = 50 act = gs_buffer-overflow ).
   ENDMETHOD.
 
 

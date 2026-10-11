@@ -35,7 +35,8 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       c_save_luw      TYPE tv_save_mode VALUE 'L',   " 随调用方 LUW（TRACE 用）
       c_save_indep    TYPE tv_save_mode VALUE 'R',   " 独立 LUW（默认，回滚不丢）
       c_msgclass_txt  TYPE sy-msgid VALUE 'ZLOG',    " SE91: ZLOG 001 = &1&2&3&4
-      c_txtno_txt     TYPE sy-msgno VALUE '001'.
+      c_txtno_txt     TYPE sy-msgno VALUE '001',
+      c_max_entries   TYPE i        VALUE 200.       " 单日志条目上限（量控）
 
     " 开启日志会话：立即返回日志 ID（此刻尚未保存）
     CLASS-METHODS begin
@@ -107,15 +108,16 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         line        TYPE i,
       END OF ty_position,
       BEGIN OF ty_entry,
-        msgty TYPE sy-msgty,
-        msgid TYPE sy-msgid,
-        msgno TYPE sy-msgno,
-        msgv1 TYPE symsgv,
-        msgv2 TYPE symsgv,
-        msgv3 TYPE symsgv,
-        msgv4 TYPE symsgv,
-        pos   TYPE ty_position,
-        ctx   TYPE ty_ctx_t,
+        msgty   TYPE sy-msgty,
+        msgid   TYPE sy-msgid,
+        msgno   TYPE sy-msgno,
+        msgv1   TYPE symsgv,
+        msgv2   TYPE symsgv,
+        msgv3   TYPE symsgv,
+        msgv4   TYPE symsgv,
+        pos     TYPE ty_position,
+        ctx     TYPE ty_ctx_t,
+        repeats TYPE i,                  " 同文本同位置的连续重复次数
       END OF ty_entry,
       ty_entries TYPE STANDARD TABLE OF ty_entry WITH EMPTY KEY,
       BEGIN OF ty_buffer,
@@ -128,6 +130,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         caller_prog TYPE c LENGTH 40,
         entries     TYPE ty_entries,
         base_ctx    TYPE ty_ctx_t,
+        overflow    TYPE i,              " 超上限被丢弃的消息数
       END OF ty_buffer.
 
     CLASS-DATA gs_buffer TYPE ty_buffer.
@@ -262,6 +265,13 @@ CLASS zcl_log IMPLEMENTATION.
       CLEAR gs_buffer.
       RETURN.
     ENDIF.
+    IF gs_buffer-overflow > 0.          " 超上限丢弃提示（量控 D3）
+      APPEND VALUE ty_entry(
+          msgty = 'W'
+          msgid = c_msgclass_txt
+          msgno = c_txtno_txt
+          msgv1 = |{ gs_buffer-overflow } 条消息超出上限未记录| ) TO gs_buffer-entries.
+    ENDIF.
     CASE gs_buffer-save_mode.
       WHEN c_save_luw.
         save_luw( ).
@@ -295,7 +305,35 @@ CLASS zcl_log IMPLEMENTATION.
 
 
   METHOD add_entry.
+    " 量控 D3：
+    " 1) 降噪——同文本同位置的连续重复只记一条，次数累加（循环刷消息场景）
+    " 2) 上限——超过 c_max_entries 不再缓冲，只计数；消息本身照常返回调用方
+    IF lines( gs_buffer-entries ) > 0.
+      DATA(ls_last) = gs_buffer-entries[ lines( gs_buffer-entries ) ].
+      IF ls_last-msgty = is_entry-msgty
+         AND ls_last-msgid = is_entry-msgid
+         AND ls_last-msgno = is_entry-msgno
+         AND ls_last-msgv1 = is_entry-msgv1
+         AND ls_last-msgv2 = is_entry-msgv2
+         AND ls_last-msgv3 = is_entry-msgv3
+         AND ls_last-msgv4 = is_entry-msgv4
+         AND ls_last-pos-include = is_entry-pos-include
+         AND ls_last-pos-line = is_entry-pos-line.
+        gs_buffer-entries[ lines( gs_buffer-entries ) ]-repeats =
+            gs_buffer-entries[ lines( gs_buffer-entries ) ]-repeats + 1.
+        rs_ret2 = build_ret2( is_entry ).
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    IF lines( gs_buffer-entries ) >= c_max_entries.
+      gs_buffer-overflow = gs_buffer-overflow + 1.
+      rs_ret2 = build_ret2( is_entry ).
+      RETURN.
+    ENDIF.
+
     DATA(ls_entry) = is_entry.
+    ls_entry-repeats = 1.               " 语义：该条目出现的总次数
     APPEND LINES OF gs_buffer-base_ctx TO ls_entry-ctx.  " begin 上下文挂到每条
     APPEND ls_entry TO gs_buffer-entries.
     rs_ret2 = build_ret2( ls_entry ).
@@ -387,6 +425,9 @@ CLASS zcl_log IMPLEMENTATION.
 
       DATA lv_trace TYPE string.
       lv_trace = |at { ls_entry-pos-include } line { ls_entry-pos-line }|.
+      IF ls_entry-repeats > 1.          " 降噪计数（量控 D3）
+        lv_trace = |{ lv_trace } x{ ls_entry-repeats }|.
+      ENDIF.
       LOOP AT ls_entry-ctx ASSIGNING FIELD-SYMBOL(<ls_ctx>).
         lv_trace = |{ lv_trace }; { <ls_ctx>-name }={ <ls_ctx>-value }|.
       ENDLOOP.
