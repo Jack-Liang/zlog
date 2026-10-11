@@ -1,3 +1,4 @@
+" sync marker: force test include into system via abapGit pull 2026-10-12
 " 单元测试只覆盖纯逻辑（ID 生成、ret2 组装、文本拆分、缓冲管理）。
 " 持久化路径（save_luw / save_indep → RFC 'NONE'）有数据库副作用，
 " 不在 ABAP Unit 中执行，由演示程序 ZMSGTRACE_DEMO + SLG1 人工验证。
