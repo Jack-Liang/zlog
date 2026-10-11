@@ -29,9 +29,13 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
 
     CONSTANTS:
       c_object        TYPE balobj_d  VALUE 'ZLOG',   " SLG0 对象
-      c_subobject_err TYPE balsubobj VALUE 'ERROR',  " 保留期建议 90 天
-      c_subobject_aud TYPE balsubobj VALUE 'AUDIT',  " 保留期建议 365 天
-      c_subobject_trc TYPE balsubobj VALUE 'TRACE',  " 保留期建议 14 天
+      c_subobject_err TYPE balsubobj VALUE 'ERROR',
+      c_subobject_aud TYPE balsubobj VALUE 'AUDIT',
+      c_subobject_trc TYPE balsubobj VALUE 'TRACE',
+      " D5 保留期（天）：写入 BAL 头 ALDATE_DEL，SLG2 清理作业自动尊重
+      c_retention_err TYPE i VALUE 90,
+      c_retention_aud TYPE i VALUE 365,
+      c_retention_trc TYPE i VALUE 14,
       c_save_luw      TYPE tv_save_mode VALUE 'L',   " 随调用方 LUW（TRACE 用）
       c_save_indep    TYPE tv_save_mode VALUE 'R',   " 独立 LUW（默认，回滚不丢）
       c_msgclass_txt  TYPE sy-msgid VALUE 'ZLOG',    " SE91: ZLOG 001 = &1&2&3&4
@@ -39,11 +43,13 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
       c_max_entries   TYPE i        VALUE 200.       " 单日志条目上限（量控）
 
     " 开启日志会话：立即返回日志 ID（此刻尚未保存）
+    " iv_stack = X 时每条目额外记录调用链（A6，排查深层嵌套路径用）
     CLASS-METHODS begin
       IMPORTING
         iv_subobject TYPE balsubobj   DEFAULT c_subobject_err
         iv_save_mode TYPE tv_save_mode DEFAULT c_save_indep
         it_ctx       TYPE ty_ctx_t    OPTIONAL
+        iv_stack     TYPE abap_bool   DEFAULT abap_false
       RETURNING VALUE(rv_log_id) TYPE tv_log_id.
 
     " T100 消息条目
@@ -143,6 +149,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         pos     TYPE ty_position,
         ctx     TYPE ty_ctx_t,
         repeats TYPE i,                  " 同文本同位置的连续重复次数
+        stack   TYPE string,             " 调用链（A6 开关开启时）
       END OF ty_entry,
       ty_entries TYPE STANDARD TABLE OF ty_entry WITH EMPTY KEY,
       BEGIN OF ty_buffer,
@@ -156,6 +163,7 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         entries     TYPE ty_entries,
         base_ctx    TYPE ty_ctx_t,
         overflow    TYPE i,              " 超上限被丢弃的消息数
+        stack_mode  TYPE abap_bool,      " 每条目附加调用链（A6）
       END OF ty_buffer.
 
     CLASS-DATA gs_buffer TYPE ty_buffer.
@@ -167,6 +175,10 @@ CLASS zcl_log DEFINITION PUBLIC FINAL CREATE PUBLIC.
         RETURNING VALUE(rs_ret2) TYPE bapiret2,
       caller_position
         RETURNING VALUE(rs_pos) TYPE ty_position,
+      build_stack
+        RETURNING VALUE(rv_stack) TYPE string,
+      retention_days
+        RETURNING VALUE(rv_days) TYPE i,
       split_text
         IMPORTING iv_text  TYPE clike
         CHANGING  cs_entry TYPE ty_entry,
@@ -213,6 +225,7 @@ CLASS zcl_log IMPLEMENTATION.
     gs_buffer-created_on = sy-datum.
     gs_buffer-created_at = sy-uzeit.
     gs_buffer-base_ctx   = it_ctx.
+    gs_buffer-stack_mode = iv_stack.
     gs_buffer-caller_prog = caller_position( )-mainprogram.
     rv_log_id = gs_buffer-log_id.
   ENDMETHOD.
@@ -229,6 +242,9 @@ CLASS zcl_log IMPLEMENTATION.
     ls_entry-msgv3 = iv_msgv3.
     ls_entry-msgv4 = iv_msgv4.
     ls_entry-pos   = caller_position( ).
+    IF gs_buffer-stack_mode = abap_true.
+      ls_entry-stack = build_stack( ).
+    ENDIF.
     rs_ret2 = add_entry( ls_entry ).
   ENDMETHOD.
 
@@ -241,6 +257,9 @@ CLASS zcl_log IMPLEMENTATION.
     ls_entry-msgno = c_txtno_txt.
     split_text( EXPORTING iv_text = iv_text CHANGING cs_entry = ls_entry ).
     ls_entry-pos = caller_position( ).
+    IF gs_buffer-stack_mode = abap_true.
+      ls_entry-stack = build_stack( ).
+    ENDIF.
     rs_ret2 = add_entry( ls_entry ).
   ENDMETHOD.
 
@@ -273,6 +292,9 @@ CLASS zcl_log IMPLEMENTATION.
                     source_line  = ls_entry-pos-line ).
       CATCH cx_root ##NO_HANDLER.    " 部分异常（如恢复的异常）无源码位置
     ENDTRY.
+    IF gs_buffer-stack_mode = abap_true.
+      ls_entry-stack = build_stack( ).
+    ENDIF.
     rs_ret2 = add_entry( ls_entry ).
   ENDMETHOD.
 
@@ -405,6 +427,36 @@ CLASS zcl_log IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD build_stack.
+    " A6：紧凑调用链——直接调用方之后的 4 帧（直接调用方已在追溯行），
+    " 形如 "PROG(12) <- PROG(34) <- PROG(56)"，截断在 200 字符预算内
+    DATA lt_stack TYPE abap_callstack.
+    CALL FUNCTION 'SYSTEM_CALLSTACK'
+      IMPORTING
+        callstack = lt_stack.
+    DELETE lt_stack WHERE include CS 'ZCL_LOG'.
+    LOOP AT lt_stack INTO DATA(ls_frame) FROM 2 TO 5.
+      IF rv_stack IS NOT INITIAL.
+        rv_stack = |{ rv_stack } <- |.
+      ENDIF.
+      rv_stack = |{ rv_stack }{ ls_frame-include }({ ls_frame-line })|.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD retention_days.
+    " D5：按子对象映射保留期，写入 BAL 头 ALDATE_DEL，SLG2 自动尊重
+    CASE gs_buffer-subobject.
+      WHEN c_subobject_aud.
+        rv_days = c_retention_aud.
+      WHEN c_subobject_trc.
+        rv_days = c_retention_trc.
+      WHEN OTHERS.
+        rv_days = c_retention_err.
+    ENDCASE.
+  ENDMETHOD.
+
+
   METHOD split_text.
     " 正文拆 4 x 50 进 ZLOG 001 的 &1&2&3&4，超长部分截断
     DATA lv_text TYPE string.
@@ -492,6 +544,21 @@ CLASS zcl_log IMPLEMENTATION.
                              message_v3 = lv_v3
                              message_v4 = lv_v4
                              log_no     = |{ sy-tabix }| ) TO et_msgs.
+
+      " 调用链行（A6，仅 begin( iv_stack = X ) 时存在）
+      IF ls_entry-stack IS NOT INITIAL.
+        split_to_vars( EXPORTING iv_text = |stack: { ls_entry-stack }|
+                       IMPORTING ev_v1 = lv_v1 ev_v2 = lv_v2
+                                 ev_v3 = lv_v3 ev_v4 = lv_v4 ).
+        APPEND VALUE bapiret2( type       = 'I'
+                               id         = c_msgclass_txt
+                               number     = c_txtno_txt
+                               message_v1 = lv_v1
+                               message_v2 = lv_v2
+                               message_v3 = lv_v3
+                               message_v4 = lv_v4
+                               log_no     = |{ sy-tabix }| ) TO et_msgs.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -528,7 +595,8 @@ CLASS zcl_log IMPLEMENTATION.
             extnumber = |{ gs_buffer-log_id }|
             aluser    = gs_buffer-created_by
             aldate    = gs_buffer-created_on
-            altime    = gs_buffer-created_at )
+            altime    = gs_buffer-created_at
+            aldate_del = gs_buffer-created_on + retention_days( ) ) " D5 保留期
       IMPORTING
         e_log_handle   = lv_handle
       EXCEPTIONS

@@ -22,10 +22,21 @@ FUNCTION z_log_save_rfc.
 
   DATA: lt_msgs   TYPE bapirettab,
         lv_handle TYPE balloghndl,
-        ls_msg    TYPE bal_s_msg.
+        ls_msg    TYPE bal_s_msg,
+        lv_ret    TYPE i.
 
   IMPORT msgs = lt_msgs
          FROM DATA BUFFER iv_payload.
+
+  " D5 保留期：按子对象映射（与 ZCL_LOG 常量一致），SLG2 自动尊重
+  CASE iv_subobject.
+    WHEN zcl_log=>c_subobject_aud.
+      lv_ret = zcl_log=>c_retention_aud.
+    WHEN zcl_log=>c_subobject_trc.
+      lv_ret = zcl_log=>c_retention_trc.
+    WHEN OTHERS.
+      lv_ret = zcl_log=>c_retention_err.
+  ENDCASE.
 
   CALL FUNCTION 'BAL_LOG_CREATE'
     EXPORTING
@@ -35,7 +46,8 @@ FUNCTION z_log_save_rfc.
           extnumber = iv_extnumber
           aluser    = iv_created_by
           aldate    = iv_created_on
-          altime    = iv_created_at )
+          altime    = iv_created_at
+          aldate_del = iv_created_on + lv_ret )
     IMPORTING
       e_log_handle   = lv_handle
     EXCEPTIONS
