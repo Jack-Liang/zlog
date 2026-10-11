@@ -113,7 +113,15 @@ ENDIF.
 
 ## 基线扫描（存量改造 E1）
 
-运行 `ZMSGTRACE_SCAN`（SA38）：包 = 目标自研包，默认模式 `MESSAGE` / `msgtx`（可改），扫 PROG/函数 include/类方法 include，跳过含 `ZCL_MSGTRACE` 的行，输出"裸消息点"候选清单（含误报需人工确认，上限默认 500 条）。出口兜底运行一个月后，按 SLG1/ZMSGTRACE_QUERY 中出现频率排出热点，逐批替换为 `zcl_msgtrace=>msg( )`；新代码规约：禁止不经 ZCL_MSGTRACE 的裸消息（后续加 ATC 检查）。
+运行 `ZMSGTRACE_SCAN`（SA38）：包 = 目标自研包，默认模式 `MESSAGE` / `msgtx`（可改），扫 PROG/函数 include/类方法 include，跳过含 `ZCL_MSGTRACE` 的行，输出"裸消息点"候选清单（含误报需人工确认，上限默认 500 条）。
+
+`P_SINC` 填日期时**只扫该日期之后改动的对象**（按主程序 PROGDIR-UDAT 过滤）——评审或运输前检查"新碰过的代码是否还有裸消息"用一个日期搞定；留空 = 全量基线。出口兜底运行一个月后，按 SLG1/ZMSGTRACE_QUERY 中出现频率排出热点，逐批替换为 `zcl_msgtrace=>msg( )`。
+
+## 新代码规约（E3）
+
+1. 新代码**禁止裸消息**：错误/留痕路径不写不经 ZCL_MSGTRACE 的 `MESSAGE` 和 `msgtx` 赋值（纯技术性提示、确定不外发的除外）。
+2. 存量"谁碰谁迁"：改到哪块代码，顺手把该块的裸消息换成三形态之一（`text_now` / `log_parts` / `log_now`，见出口接法）。
+3. 检查手段：运输/评审前跑 `ZMSGTRACE_SCAN` + `P_SINC` = 本次改动起始日；ATC/abaplint 均无现成的"禁裸消息"规则，以 SCAN 为准。
 
 ## 已知限制（MVP 范围内接受）
 
@@ -128,11 +136,11 @@ ENDIF.
 
 ## 路线图（已完成项见上文对应章节）
 
-已完成：核心类（含量控 D3 / 调用链 A6 / 保留期 D5）· 出口三形态（text_now / log_parts / log_now，B1~B3）· 查询报表 ZMSGTRACE_QUERY（C2/C3，双击跳源码 + 位置回填）· 基线扫描 ZMSGTRACE_SCAN（E1）· 8 个 ABAP Unit · abaplint 全绿 · 真机 E2E 验收。
+已完成：核心类（含量控 D3 / 调用链 A6 / JSON 快照 A8 / 保留期 D5）· 出口三形态（text_now / log_parts / log_now，B1~B3）· 查询报表 ZMSGTRACE_QUERY（C2/C3，双击跳源码 + 位置回填 + **行号漂移自动愈合**）· 行号漂移对策（追溯行记 `line N/M` + 语句摘录）· 基线扫描 ZMSGTRACE_SCAN（E1 + E3 改动日期过滤）· ABAP Unit 黑盒化（get_stats）· abaplint 全绿 · 真机 E2E 验收。
 
 按需待做：
 
-- A8：JSON 上下文侧表（需同步挂接标准删除，见 SchwarzIT 教训）
 - D4：按用户临时日志级别（带失效日期）
-- E3：ATC 检查禁止裸消息
+- D6：BAL 删除与侧表 ZMSGTRACE_CTX 的同步挂接（当前由 cleanup 程序按日期对齐两侧）
+- B4：RAP 场景消息适配
 - Fiori 版查询界面（RAP/OData 暴露 ZMSGTRACE_QUERY 逻辑）

@@ -15,6 +15,7 @@ PARAMETERS:
   p_pack TYPE devclass OBLIGATORY,
   p_pat1 TYPE c LENGTH 30 DEFAULT 'MESSAGE',
   p_pat2 TYPE c LENGTH 30 DEFAULT 'msgtx',
+  p_sinc TYPE datum,                  " 只扫该日期后改动的对象（E3：评审/运输前检查；空=全量基线）
   p_maxh TYPE i DEFAULT 500.          " 最多输出多少条命中
 
 TYPES: BEGIN OF ty_hit,
@@ -79,6 +80,18 @@ FORM scan_package USING iv_pack TYPE devclass.
 
   LOOP AT lt_tadir INTO DATA(ls_tadir).
 
+    " E3：限定"该日期后改动的对象"——评审/运输前只查新碰过的代码（PROGDIR-UDAT）
+    DATA: lv_ok   TYPE abap_bool,
+          lv_main TYPE c LENGTH 40.
+    CLEAR lv_ok.
+    IF ls_tadir-object = 'FUGR'.
+      lv_main = |SAPL{ ls_tadir-obj_name }|.
+    ELSE.
+      lv_main = ls_tadir-obj_name.
+    ENDIF.
+    PERFORM obj_changed_after USING lv_main p_sinc CHANGING lv_ok.
+    CHECK lv_ok = abap_true.
+
     CASE ls_tadir-object.
 
       WHEN 'PROG'.
@@ -117,6 +130,24 @@ FORM scan_package USING iv_pack TYPE devclass.
     ENDIF.
   ENDLOOP.
 
+ENDFORM.
+
+
+FORM obj_changed_after USING iv_main TYPE clike
+                             iv_sinc TYPE datum
+                    CHANGING cv_yes TYPE abap_bool.
+  " 主程序的 PROGDIR-UDAT >= iv_sinc 视为"改过"；iv_sinc 空 = 不过滤（全量基线）
+  DATA lv_udat TYPE datum.
+  CLEAR cv_yes.
+  IF iv_sinc IS INITIAL.
+    cv_yes = abap_true.
+    RETURN.
+  ENDIF.
+  SELECT SINGLE udat FROM progdir INTO lv_udat
+    WHERE name = iv_main.
+  IF sy-subrc = 0 AND lv_udat >= iv_sinc.
+    cv_yes = abap_true.
+  ENDIF.
 ENDFORM.
 
 

@@ -41,6 +41,9 @@ CLASS lcl_events DEFINITION FINAL.
       IMPORTING row column.
   PRIVATE SECTION.
     DATA mr_table TYPE REF TO data.
+    METHODS jump_to_source IMPORTING iv_incl TYPE clike
+                                     iv_line TYPE i
+                                     iv_text TYPE clike.
 ENDCLASS.
 
 CLASS lcl_events IMPLEMENTATION.
@@ -61,14 +64,10 @@ CLASS lcl_events IMPLEMENTATION.
     ASSIGN COMPONENT 'INCL' OF STRUCTURE <ls_out> TO FIELD-SYMBOL(<lv_incl>).
     ASSIGN COMPONENT 'LINE' OF STRUCTURE <ls_out> TO FIELD-SYMBOL(<lv_line>).
     IF <lv_incl> IS NOT INITIAL AND <lv_line> IS NOT INITIAL.
-      CALL FUNCTION 'RS_TOOL_ACCESS'
-        EXPORTING
-          operation   = 'SHOW'
-          object_type = 'PROG'
-          object_name = <lv_incl>
-          position    = <lv_line>
-        EXCEPTIONS
-          OTHERS      = 0.
+      ASSIGN COMPONENT 'TEXT' OF STRUCTURE <ls_out> TO FIELD-SYMBOL(<lv_text>).
+      jump_to_source( iv_incl = <lv_incl>
+                      iv_line = <lv_line>
+                      iv_text = <lv_text> ).
       RETURN.                          " 仅追溯行可跳转
     ENDIF.
 
@@ -80,6 +79,68 @@ CLASS lcl_events IMPLEMENTATION.
         CATCH cx_root ##NO_HANDLER.
       ENDTRY.
     ENDIF.
+  ENDMETHOD.
+
+
+  METHOD jump_to_source.
+    " 行号漂移自动愈合：追溯行带语句摘录（"line N/M: <摘录>"）时优先按摘录
+    " 定位"现在的行号"，代码改过也能跳对；无摘录（旧日志/降级）直跳旧行号
+    DATA: lv_excerpt TYPE string,
+          lt_src     TYPE string_table,
+          lv_jump    TYPE i,
+          lv_stmt    TYPE string,
+          lv_hits    TYPE i,
+          lv_first   TYPE i.
+
+    lv_jump = iv_line.
+
+    FIND REGEX 'line [0-9]+[0-9/]*: ([^;]+)' IN iv_text
+         SUBMATCHES lv_excerpt ##REGEX_POSIX.
+    IF sy-subrc = 0 AND lv_excerpt IS NOT INITIAL.
+      CONDENSE lv_excerpt.
+
+      READ REPORT iv_incl INTO lt_src.
+      IF sy-subrc <> 0.
+        MESSAGE |include 已不存在（{ iv_incl }），无法跳转| TYPE 'S' DISPLAY LIKE 'W'.
+        RETURN.
+      ENDIF.
+
+      lv_stmt = ``.
+      IF iv_line >= 1 AND iv_line <= lines( lt_src ).
+        lv_stmt = condense( lt_src[ iv_line ] ).
+      ENDIF.
+
+      IF NOT lv_stmt CS lv_excerpt.      " 旧行号已漂移/越界 → 按摘录搜当前源码
+        LOOP AT lt_src ASSIGNING FIELD-SYMBOL(<lv_src>).
+          lv_stmt = condense( <lv_src> ).
+          IF lv_stmt CS lv_excerpt.
+            lv_hits = lv_hits + 1.
+            IF lv_first = 0.
+              lv_first = sy-tabix.
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+        CASE lv_hits.
+          WHEN 1.
+            lv_jump = lv_first.
+            MESSAGE |代码已变动，自动定位到当前第 { lv_first } 行（记录时第 { iv_line } 行）| TYPE 'S'.
+          WHEN 0.
+            MESSAGE |代码已变动且未再找到该语句，按记录时行号 { iv_line } 跳转| TYPE 'S' DISPLAY LIKE 'W'.
+          WHEN OTHERS.
+            lv_jump = lv_first.
+            MESSAGE |该语句现出现 { lv_hits } 次，跳到第一处（第 { lv_first } 行）| TYPE 'S'.
+        ENDCASE.
+      ENDIF.
+    ENDIF.
+
+    CALL FUNCTION 'RS_TOOL_ACCESS'
+      EXPORTING
+        operation   = 'SHOW'
+        object_type = 'PROG'
+        object_name = iv_incl
+        position    = lv_jump
+      EXCEPTIONS
+        OTHERS      = 0.
   ENDMETHOD.
 
 ENDCLASS.
