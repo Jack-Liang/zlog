@@ -7,7 +7,7 @@ START-OF-SELECTION.
   " 场景 1：出口兜底式一步留痕（B1/B2 最常用形态）
   " 返回的 message 尾部自带 " (log ID)"，可直接覆盖到 msgtx 字段
   DATA(ls_ret2) = zcl_log=>log_now(
-      iv_text = |物料 4711 不存在，工厂 { sy-werks }|
+      iv_text = |物料 4711 不存在（系统 { sy-sysid }，客户端 { sy-mandt }）|
       it_ctx  = VALUE #( ( name = 'MATNR' value = '4711' ) ) ).
   WRITE / ls_ret2-message.
 
