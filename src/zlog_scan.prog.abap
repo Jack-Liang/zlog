@@ -57,7 +57,7 @@ FORM scan_package USING iv_pack TYPE devclass.
 
       WHEN 'FUGR'.
         " 组内函数 include：L<组名>U<nn>
-        DATA lv_pat TYPE c LENGTH 40.
+        DATA lv_pat TYPE string.        " string 无尾部填充，LIKE 模式安全
         lv_pat = |L{ ls_tadir-obj_name }U%|.
         SELECT * FROM tfdir INTO TABLE lt_fdir
           WHERE include LIKE lv_pat.
