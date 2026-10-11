@@ -13,7 +13,8 @@ REPORT zmsgtrace_query.
 * ---------------------------------------------------------------------
 
 PARAMETERS:
-  p_id    TYPE c LENGTH 20,            " 日志 ID（可粘贴部分，模糊匹配）
+  p_id    TYPE c LENGTH 20 LOWER CASE,  " 日志 ID（可粘贴部分，模糊匹配）
+                                        " LOWER CASE 必须：ID 混合大小写，屏幕会强制大写导致永远查不到
   p_sub   TYPE balsubobj,              " 子对象（空=全部）
   p_rows  TYPE i DEFAULT 100.          " 浏览模式最多取多少条日志
 
