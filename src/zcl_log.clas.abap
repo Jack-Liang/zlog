@@ -298,7 +298,7 @@ CLASS zcl_log IMPLEMENTATION.
     DATA lt_stack TYPE abap_callstack.
     CALL FUNCTION 'SYSTEM_CALLSTACK'
       IMPORTING
-        et_callstack = lt_stack.
+        callstack = lt_stack.
     " 去掉日志类自身栈帧，剩余第一帧即业务调用方。
     " 不写死栈深度：类内部新增包装层不影响定位
     " （重命名本类时需同步修改过滤串）
@@ -338,7 +338,7 @@ CLASS zcl_log IMPLEMENTATION.
                  is_entry-msgv3 is_entry-msgv4
             INTO DATA(lv_text).
     rs_ret2 = VALUE bapiret2(
-      type       = CONV #( lv_msgty )
+      type       = lv_msgty
       id         = is_entry-msgid
       number     = is_entry-msgno
       message_v1 = is_entry-msgv1
@@ -399,8 +399,8 @@ CLASS zcl_log IMPLEMENTATION.
         ( parname = 'SYS'  parvalue = |{ sy-sysid }/{ sy-mandt }| )
         ( parname = 'USER' parvalue = sy-uname ) ).
       LOOP AT ls_entry-ctx ASSIGNING FIELD-SYMBOL(<ls_ctx>).
-        APPEND VALUE bal_s_parm( parname = <ls_ctx>-name
-                                 parvalue = <ls_ctx>-value ) TO lt_par.
+        APPEND VALUE bal_s_par( parname = <ls_ctx>-name
+                                parvalue = <ls_ctx>-value ) TO lt_par.
       ENDLOOP.
       CALL FUNCTION 'BAL_LOG_MSG_ADD'
         EXPORTING
@@ -426,7 +426,7 @@ CLASS zcl_log IMPLEMENTATION.
     DATA lv_handle TYPE balloghndl.
     CALL FUNCTION 'BAL_LOG_CREATE'
       EXPORTING
-        i_s_log_header = VALUE bal_s_log(
+        i_s_log = VALUE bal_s_log(
             object    = c_object
             subobject = gs_buffer-subobject
             extnumber = |{ gs_buffer-log_id }|
@@ -453,11 +453,15 @@ CLASS zcl_log IMPLEMENTATION.
     " RFC 'NONE'：起独立内部会话/独立 LUW 保存，调用方 ROLLBACK 带不走。
     " 两张传输表打包成 XSTRING 数据簇传参（接口全标量，
     " 与 abapGit 自带远程 FM 的参数风格一致，规避 TABLES 参数）
-    build_transport_tables( IMPORTING et_msgs = DATA(lt_msgs)
-                                      et_pars = DATA(lt_pars) ).
+    DATA: lt_msgs    TYPE bapirettab,
+          lt_pars    TYPE bapirettab,
+          lv_payload TYPE xstring.
+
+    build_transport_tables( IMPORTING et_msgs = lt_msgs
+                                      et_pars = lt_pars ).
     EXPORT msgs = lt_msgs
            pars = lt_pars
-           TO DATA BUFFER DATA(lv_payload).
+           TO DATA BUFFER lv_payload.
 
     CALL FUNCTION 'Z_LOG_SAVE_RFC'
       DESTINATION 'NONE'

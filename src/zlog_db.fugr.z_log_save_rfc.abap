@@ -33,7 +33,7 @@ FUNCTION z_log_save_rfc.
 
   CALL FUNCTION 'BAL_LOG_CREATE'
     EXPORTING
-      i_s_log_header = VALUE bal_s_log(
+      i_s_log = VALUE bal_s_log(
           object    = iv_object
           subobject = iv_subobject
           extnumber = iv_extnumber
@@ -58,8 +58,8 @@ FUNCTION z_log_save_rfc.
     ls_msg-msgv3 = ls_m-message_v3.
     ls_msg-msgv4 = ls_m-message_v4.
     LOOP AT lt_pars INTO DATA(ls_p) WHERE parameter = ls_m-log_no.
-      APPEND VALUE bal_s_parm( parname  = ls_p-id
-                               parvalue = ls_p-message_v1 ) TO lt_par.
+      APPEND VALUE bal_s_par( parname  = ls_p-id
+                              parvalue = ls_p-message_v1 ) TO lt_par.
     ENDLOOP.
     ls_msg-params-t_par = lt_par.
     CALL FUNCTION 'BAL_LOG_MSG_ADD'

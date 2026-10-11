@@ -2,7 +2,7 @@
 *   System-defined Include-files.                                 *
 *******************************************************************
 INCLUDE lzlog_dbtop.
-INCLUDE zlog_dbuxx.
+INCLUDE lzlog_dbuxx.
 
 *******************************************************************
 *   User-defined Include-files (if necessary).                    *

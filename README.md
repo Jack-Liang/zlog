@@ -88,6 +88,8 @@ SLG2 按对象+子对象+日期范围建后台作业（每月跑一次，删 N-�
 
 ## 已知限制（MVP 范围内接受）
 
+- **目标发布基线为 ABAP Platform 816（S/4 2025）**：该版本 `BAL_LOG_CREATE` 头参数名为 `I_S_LOG`（旧版本为 `I_S_LOG_HEADER`）、`SYSTEM_CALLSTACK` 输出参数用 `CALLSTACK`（勿用新表 `ET_CALLSTACK`，行类型不同）。**移植到 7.5x 及更早系统时需改回 `I_S_LOG_HEADER`**（两个文件各一处）。
+
 - 自由文本正文 ≤ 200 字符入库（4×50 拆分进 ZLOG 001）；更长内容待 A8 JSON 容器（侧表）。
 - `save_indep` 每次 save 起一个 RFC 'NONE' 内部会话，高吞吐场景注意量控（只记 E/A）。
 - `save_luw` 模式下 BAL_DB_SAVE 可能隐式提交数据库，勿在更新流程（V1/V2）中使用该模式。
