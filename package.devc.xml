@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+ <asx:values>
+  <DATA>
+   <OBJNAME>ZLOG</OBJNAME>
+   <OBJECT>DEVC</OBJECT>
+   <MASTER_LANGUAGE>E</MASTER_LANGUAGE>
+   <DEVCLASS>ZLOG</DEVCLASS>
+   <COMPONENT/>
+   <APPLICATION/>
+   <CTEXT>Message trace logging (BAL-based)</CTEXT>
+  </DATA>
+ </asx:values>
+</asx:abap>

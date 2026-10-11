@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+ <asx:values>
+  <DATA>
+   <AREAT>ZLOG: independent LUW log persistence</AREAT>
+   <INCLUDES>
+    <I02>LZLOG_DBTOP</I02>
+   </INCLUDES>
+   <FUNCTIONS>
+    <ITEM>
+     <FUNCNAME>Z_LOG_SAVE_RFC</FUNCNAME>
+     <SHORT_TEXT>Save log entries in an independent LUW (RFC)</SHORT_TEXT>
+     <REMOTE_CALL>R</REMOTE_CALL>
+     <IMPORT>
+      <ITEM>
+       <PARAMETER>IV_OBJECT</PARAMETER>
+       <DBFIELD>BALOBJ_D</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+      <ITEM>
+       <PARAMETER>IV_SUBOBJECT</PARAMETER>
+       <DBFIELD>BALSUBOBJ</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+      <ITEM>
+       <PARAMETER>IV_EXTNUMBER</PARAMETER>
+       <DBFIELD>BALNREXT</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+      <ITEM>
+       <PARAMETER>IV_CREATED_BY</PARAMETER>
+       <DBFIELD>SYUNAME</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+      <ITEM>
+       <PARAMETER>IV_CREATED_ON</PARAMETER>
+       <DBFIELD>SYDATUM</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+      <ITEM>
+       <PARAMETER>IV_CREATED_AT</PARAMETER>
+       <DBFIELD>SYUZEIT</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+     </IMPORT>
+     <TABLES>
+      <ITEM>
+       <PARAMETER>IT_MSGS</PARAMETER>
+       <DBFIELD>BAPIRET2</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+      <ITEM>
+       <PARAMETER>IT_PARS</PARAMETER>
+       <DBFIELD>BAPIRET2</DBFIELD>
+       <TYPTYPE>1</TYPTYPE>
+      </ITEM>
+     </TABLES>
+     <EXCEP>
+      <ITEM>
+       <PARAMETER>SAVE_FAILED</PARAMETER>
+      </ITEM>
+     </EXCEP>
+    </ITEM>
+   </FUNCTIONS>
+  </DATA>
+ </asx:values>
+</asx:abap>
