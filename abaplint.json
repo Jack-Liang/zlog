@@ -1,0 +1,13 @@
+{
+  "format": "standard",
+  "syntax": {
+    "version": "v757",
+    "errorNamespace": "^(Z|Y|LCL_|LTCL_)"
+  },
+  "rules": {
+    "7bit_ascii": false,
+    "line_length": {
+      "length": 120
+    }
+  }
+}
