@@ -5,7 +5,9 @@
    <MASTER_LANGUAGE>E</MASTER_LANGUAGE>
    <STARTING_FOLDER>/src/</STARTING_FOLDER>
    <FOLDER_LOGIC>PREFIX</FOLDER_LOGIC>
-   <VERSIONING>backend</VERSIONING>
+   <IGNORE>
+    <item>/README.md</item>
+   </IGNORE>
   </DATA>
  </asx:values>
 </asx:abap>

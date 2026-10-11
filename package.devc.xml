@@ -1,14 +1,10 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
- <asx:values>
-  <DATA>
-   <OBJNAME>ZLOG</OBJNAME>
-   <OBJECT>DEVC</OBJECT>
-   <MASTER_LANGUAGE>E</MASTER_LANGUAGE>
-   <DEVCLASS>ZLOG</DEVCLASS>
-   <COMPONENT/>
-   <APPLICATION/>
-   <CTEXT>Message trace logging (BAL-based)</CTEXT>
-  </DATA>
- </asx:values>
-</asx:abap>
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_DEVC" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <DEVC>
+    <CTEXT>Message trace logging (BAL-based)</CTEXT>
+   </DEVC>
+  </asx:values>
+ </asx:abap>
+</abapGit>

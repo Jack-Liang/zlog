@@ -1,67 +1,60 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
- <asx:values>
-  <DATA>
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_FUGR" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
    <AREAT>ZLOG: independent LUW log persistence</AREAT>
    <INCLUDES>
-    <I02>LZLOG_DBTOP</I02>
+    <SOBJ_NAME>LZLOG_DBTOP</SOBJ_NAME>
+    <SOBJ_NAME>SAPLZLOG_DB</SOBJ_NAME>
    </INCLUDES>
    <FUNCTIONS>
-    <ITEM>
+    <item>
      <FUNCNAME>Z_LOG_SAVE_RFC</FUNCNAME>
-     <SHORT_TEXT>Save log entries in an independent LUW (RFC)</SHORT_TEXT>
      <REMOTE_CALL>R</REMOTE_CALL>
+     <SHORT_TEXT>Save log entries in an independent LUW (RFC)</SHORT_TEXT>
      <IMPORT>
-      <ITEM>
+      <RSIMP>
        <PARAMETER>IV_OBJECT</PARAMETER>
-       <DBFIELD>BALOBJ_D</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
-      <ITEM>
+       <TYP>BALOBJ_D</TYP>
+      </RSIMP>
+      <RSIMP>
        <PARAMETER>IV_SUBOBJECT</PARAMETER>
-       <DBFIELD>BALSUBOBJ</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
-      <ITEM>
+       <TYP>BALSUBOBJ</TYP>
+      </RSIMP>
+      <RSIMP>
        <PARAMETER>IV_EXTNUMBER</PARAMETER>
-       <DBFIELD>BALNREXT</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
-      <ITEM>
+       <TYP>BALNREXT</TYP>
+      </RSIMP>
+      <RSIMP>
        <PARAMETER>IV_CREATED_BY</PARAMETER>
-       <DBFIELD>SYUNAME</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
-      <ITEM>
+       <TYP>SYUNAME</TYP>
+      </RSIMP>
+      <RSIMP>
        <PARAMETER>IV_CREATED_ON</PARAMETER>
-       <DBFIELD>SYDATUM</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
-      <ITEM>
+       <TYP>SYDATUM</TYP>
+      </RSIMP>
+      <RSIMP>
        <PARAMETER>IV_CREATED_AT</PARAMETER>
-       <DBFIELD>SYUZEIT</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
+       <TYP>SYUZEIT</TYP>
+      </RSIMP>
      </IMPORT>
      <TABLES>
-      <ITEM>
+      <RSTBL>
        <PARAMETER>IT_MSGS</PARAMETER>
-       <DBFIELD>BAPIRET2</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
-      <ITEM>
+       <TYP>BAPIRET2</TYP>
+      </RSTBL>
+      <RSTBL>
        <PARAMETER>IT_PARS</PARAMETER>
-       <DBFIELD>BAPIRET2</DBFIELD>
-       <TYPTYPE>1</TYPTYPE>
-      </ITEM>
+       <TYP>BAPIRET2</TYP>
+      </RSTBL>
      </TABLES>
-     <EXCEP>
-      <ITEM>
+     <EXCEPTION>
+      <RSEXC>
        <PARAMETER>SAVE_FAILED</PARAMETER>
-      </ITEM>
-     </EXCEP>
-    </ITEM>
+      </RSEXC>
+     </EXCEPTION>
+    </item>
    </FUNCTIONS>
-  </DATA>
- </asx:values>
-</asx:abap>
+  </asx:values>
+ </asx:abap>
+</abapGit>
