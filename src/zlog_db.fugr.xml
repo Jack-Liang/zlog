@@ -38,17 +38,11 @@
        <PARAMETER>IV_CREATED_AT</PARAMETER>
        <TYP>SYUZEIT</TYP>
       </RSIMP>
+      <RSIMP>
+       <PARAMETER>IV_PAYLOAD</PARAMETER>
+       <TYP>XSTRING</TYP>
+      </RSIMP>
      </IMPORT>
-     <TABLES>
-      <RSTBL>
-       <PARAMETER>IT_MSGS</PARAMETER>
-       <TYP>BAPIRET2</TYP>
-      </RSTBL>
-      <RSTBL>
-       <PARAMETER>IT_PARS</PARAMETER>
-       <TYP>BAPIRET2</TYP>
-      </RSTBL>
-     </TABLES>
      <EXCEPTION>
       <RSEXC>
        <EXCEPTION>SAVE_FAILED</EXCEPTION>

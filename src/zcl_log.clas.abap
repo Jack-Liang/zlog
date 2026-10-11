@@ -450,9 +450,15 @@ CLASS zcl_log IMPLEMENTATION.
 
 
   METHOD save_indep.
-    " RFC 'NONE'：起独立内部会话/独立 LUW 保存，调用方 ROLLBACK 带不走
+    " RFC 'NONE'：起独立内部会话/独立 LUW 保存，调用方 ROLLBACK 带不走。
+    " 两张传输表打包成 XSTRING 数据簇传参（接口全标量，
+    " 与 abapGit 自带远程 FM 的参数风格一致，规避 TABLES 参数）
     build_transport_tables( IMPORTING et_msgs = DATA(lt_msgs)
                                       et_pars = DATA(lt_pars) ).
+    EXPORT msgs = lt_msgs
+           pars = lt_pars
+           TO DATA BUFFER DATA(lv_payload).
+
     CALL FUNCTION 'Z_LOG_SAVE_RFC'
       DESTINATION 'NONE'
       EXPORTING
@@ -462,9 +468,7 @@ CLASS zcl_log IMPLEMENTATION.
         iv_created_by       = gs_buffer-created_by
         iv_created_on       = gs_buffer-created_on
         iv_created_at       = gs_buffer-created_at
-      TABLES
-        it_msgs             = lt_msgs
-        it_pars             = lt_pars
+        iv_payload          = lv_payload
       EXCEPTIONS
         save_failed         = 1
         system_failure      = 2
