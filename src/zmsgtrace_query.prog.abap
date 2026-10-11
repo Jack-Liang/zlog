@@ -241,8 +241,10 @@ FORM search_and_display.
           aldate    = <ls_hdr>-aldate
           altime    = <ls_hdr>-altime
           msgty     = 'S'
-          text      = |snap { ls_snap-name }: { substring( val = ls_snap-data_str
-                                                           len = 160 ) }|
+          text      = |snap { ls_snap-name }: { substring(
+                          val = ls_snap-data_str
+                          len = nmin( val1 = 160
+                                      val2 = strlen( ls_snap-data_str ) ) ) }|
           snap_json = ls_snap-data_str ) TO lt_out.
     ENDLOOP.
   ENDIF.
