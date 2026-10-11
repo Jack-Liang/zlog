@@ -22,7 +22,7 @@ START-OF-SELECTION.
   DATA(lv_id) = zcl_msgtrace=>begin( iv_subobject = zcl_msgtrace=>c_subobject_aud ).
   zcl_msgtrace=>text( iv_text = |用户 { sy-uname } 执行了库存盘点导入|
                  iv_msgty = 'I' ).
-  zcl_msgtrace=>msg( iv_msgid = 'ZLOG'
+  zcl_msgtrace=>msg( iv_msgid = 'ZMSGTRACE'
                 iv_msgno = '001'
                 iv_msgv1 = '盘点凭证'
                 iv_msgv2 = '5000012345'

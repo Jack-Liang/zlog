@@ -1,7 +1,7 @@
 REPORT zmsgtrace_query.
 
 * ---------------------------------------------------------------------
-* ZLOG 查询报表（开发计划 C2/C3，阶段 2）
+* 消息追溯日志查询报表（开发计划 C2/C3，阶段 2）
 *   粘贴日志 ID（或留空按用户/日期浏览）→ BAL 检索 → ALV 展示
 *   双击含 "at INCL line N" 的追溯行 → RS_TOOL_ACCESS 跳到报错源码行
 *
@@ -114,7 +114,8 @@ FORM search_and_display.
   FIELD-SYMBOLS: <ls_hdr> TYPE balhdr.
 
   " ---- 1) 检索条件 ---------------------------------------------------
-  APPEND VALUE #( sign = 'I' option = 'EQ' low = 'ZLOG' ) TO ls_filter-object.
+  " 必须用类的常量：硬编码曾漏改（'ZLOG' vs 'ZMSGTRACE'）导致新日志全部查不到
+  APPEND VALUE #( sign = 'I' option = 'EQ' low = zcl_msgtrace=>c_object ) TO ls_filter-object.
   IF p_sub IS NOT INITIAL.
     APPEND VALUE #( sign = 'I' option = 'EQ' low = p_sub ) TO ls_filter-subobject.
   ENDIF.
