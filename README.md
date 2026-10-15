@@ -15,17 +15,16 @@
 | ZMSGTRACE_QUERY | 程序 | 查询报表：ID/日期/用户/时间检索 + 双击跳源码（含行号漂移自动愈合）+ 快照弹窗 |
 | ZMSGTRACE_SCAN | 程序 | 基线扫描：按包找裸消息点，支持"只扫某日后改动的对象" |
 | ZMSGTRACE_CLEANUP | 程序 | 快照侧表清理（随 SLG2 作业排班） |
-| SLG0 对象 ZMSGTRACE（子对象 ERROR/AUDIT/TRACE） | 定制 | **手工配置**，见下 |
-| 消息类 ZMSGTRACE 001 = `&1&2&3&4` | SE91 | **手工配置**，自由文本载体 |
+| SLG0 对象 ZMSGTRACE（子对象 ERROR/AUDIT/TRACE） | 定制 | 随仓库交付（abapGit data 文件，`data/` 目录） |
+| 消息类 ZMSGTRACE 001 = `&1&2&3&4` | SE91 | 随仓库交付（`src/zmsgtrace.msag.xml`），自由文本载体 |
 
 ## 安装
 
-**前置定制（两步，各 1 分钟）**：
+**一步导入**：abapGit 拉取本仓库（或 zip 离线导入）。消息类（SE91）与 SLG0 对象/子对象均已随仓库交付（`src/zmsgtrace.msag.xml` + `data/` 目录的 TABU 文件），导入完成即全部就位，无需手工定制。
 
-1. **SE91**：建消息类 `ZMSGTRACE`，编号 `001`，短文本/长文本均为 `&1&2&3&4`（四个变量无缝拼接，用于自由文本入库）。
-2. **SLG0**：建对象 `ZMSGTRACE`（描述随意，如 "消息追溯日志"），子对象 `ERROR`、`AUDIT`、`TRACE`。
+若 FUGR 导入异常，退回手工方式：SE80/ADT 建函数组 `ZMSGTRACE_DB`，在组内按 `src/zmsgtrace_db.fugr.zmsgtrace_save_rfc.abap` 文件头的接口注释建 RFC 函数 `ZMSGTRACE_SAVE_RFC`（参数全部为标准 DDIC 类型），再粘贴源码；类与程序直接粘贴即可。
 
-**代码**：abapGit 导入本仓库（或 zip 离线导入）。若 FUGR 导入异常，退回手工方式：SE80/ADT 建函数组 `ZMSGTRACE_DB`，在组内按 `src/zmsgtrace_db.fugr.zmsgtrace_save_rfc.abap` 文件头的接口注释建 RFC 函数 `ZMSGTRACE_SAVE_RFC`（参数全部为标准 DDIC 类型），再粘贴源码；类与程序直接粘贴即可。
+仅当 abapGit 版本过旧、`data/` 文件未被导入（症状：SLG1 里查不到对象 ZMSGTRACE）时，手工补两步定制（各 1 分钟）：**SE91** 建消息类 `ZMSGTRACE`，编号 `001`，短文本/长文本均为 `&1&2&3&4`（四个变量无缝拼接，用于自由文本入库）；**SLG0** 建对象 `ZMSGTRACE`（描述随意，如 "消息追溯日志"），子对象 `ERROR`、`AUDIT`、`TRACE`。
 
 **验证**：运行 `ZMSGTRACE_DEMO`，屏幕输出 Log ID；运行 `ZMSGTRACE_QUERY` 粘入任一 ID，应看到消息行 + `at INCL line N/M: <语句摘录>` 追溯行；双击追溯行直接跳到报错源码行（代码改过会自动定位到当前行，状态栏有提示）。SLG1（对象 ZMSGTRACE + 外部编号 = ID）同样可查。
 
@@ -53,6 +52,7 @@ zcl_msgtrace=>save( ).
 
 " 内省（测试/监控）：get_id( ) 当前会话 ID · get_last_id( ) 最近保存 ID
 "                     get_stats( ) 缓冲状态（条目数/重复/溢出/快照数/最后调用链）
+"                     is_active( ) 会话是否开启 · reset( ) 丢弃未保存内容
 ```
 
 **设计要点**：
