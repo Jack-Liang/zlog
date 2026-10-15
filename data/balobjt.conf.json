@@ -1,0 +1,8 @@
+{
+  "name": "BALOBJT",
+  "skip_initial": false,
+  "type": "TABU",
+  "where": [
+    "spras = 'E' AND object = 'ZMSGTRACE'"
+  ]
+}

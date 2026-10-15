@@ -1,0 +1,14 @@
+[
+  {
+    "object": "ZMSGTRACE",
+    "subobject": "AUDIT"
+  },
+  {
+    "object": "ZMSGTRACE",
+    "subobject": "ERROR"
+  },
+  {
+    "object": "ZMSGTRACE",
+    "subobject": "TRACE"
+  }
+]

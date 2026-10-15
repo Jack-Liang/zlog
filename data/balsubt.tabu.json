@@ -1,0 +1,20 @@
+[
+  {
+    "spras": "E",
+    "object": "ZMSGTRACE",
+    "subobject": "AUDIT",
+    "subobjtxt": "Audit trail"
+  },
+  {
+    "spras": "E",
+    "object": "ZMSGTRACE",
+    "subobject": "ERROR",
+    "subobjtxt": "Frontend errors"
+  },
+  {
+    "spras": "E",
+    "object": "ZMSGTRACE",
+    "subobject": "TRACE",
+    "subobjtxt": "Temporary traces"
+  }
+]

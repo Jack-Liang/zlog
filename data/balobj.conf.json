@@ -1,0 +1,8 @@
+{
+  "name": "BALOBJ",
+  "skip_initial": false,
+  "type": "TABU",
+  "where": [
+    "object = 'ZMSGTRACE'"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "BALSUBT",
+  "skip_initial": false,
+  "type": "TABU",
+  "where": [
+    "spras = 'E' AND object = 'ZMSGTRACE' AND subobject = 'AUDIT'",
+    "spras = 'E' AND object = 'ZMSGTRACE' AND subobject = 'ERROR'",
+    "spras = 'E' AND object = 'ZMSGTRACE' AND subobject = 'TRACE'"
+  ]
+}
