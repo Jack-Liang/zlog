@@ -57,7 +57,7 @@ zcl_msgtrace=>save( ).
 
 **设计要点**：
 
-- **ID 即返回**：`begin( )` 生成 20 位 ID（C22 UUID 截前 20——BAPIRET2-LOG_NO 只有 char20，22 位会被静默截断）写入 BAL 外部编号，未保存也可返回给前台；与 BAL 的 LOGNUMBER 解耦。
+- **ID 即返回**：`begin( )` 生成 32 位 ID（C32 十六进制 UUID 全长；不用 C22：二进制压缩形态不可读，且非法码点过 RFC 边界会被替换成乱码）写入 BAL 外部编号，未保存也可返回给前台；与 BAL 的 LOGNUMBER 解耦。注意 `BAPIRET2-LOG_NO` 仅 char20，ret2 的 log_no 字段只承载前 20 位——完整 ID 走 message 后缀、`log_parts` 的 ev_log_id 或 `get_last_id( )`。
 - **默认独立 LUW**（`c_save_indep`）：保存走 `ZMSGTRACE_SAVE_RFC` RFC 'NONE'，调用方随后 ROLLBACK 也丢不了错误日志。`c_save_luw`（随 LUW）仅供 TRACE 类低价值日志。
 - **位置采集**：`msg/text` 记录调用者帧（`SYSTEM_CALLSTACK` 按 include 过滤 `ZCL_MSGTRACE` 帧，非固定深度）；`exception` 用 `cx_root->get_source_position` 记录 RAISE 点。位置与业务键以**追溯行**入库：每条消息后追加一条 I 级消息 `at INCL line N/M: <语句摘录>; K=V; K=V`（816 起 BAL 消息参数需 ALTEXT/CALLBACK 配置，故以消息行承载）。
 - **行号漂移对策**：行号只在记录时的代码版本下精确，include 改动后旧日志的行号会漂。追溯行同时记两个"锚"：`line N/M`（M = 记录时 include 总行数，M 对不上即知已漂）+ 语句摘录（记录时该行源码 condense 后前 40 字符，`at INCL line N/M: lv_qty > lv_max; K=V`）——行号会漂，语句文本不漂。include 被删/行号越界时自动降级为纯行号。
@@ -80,14 +80,14 @@ ls_return-msgtx = zcl_msgtrace=>text_now( |物料 { lv_matnr } 不存在| ).  " 
 
 需要类型/LOG_NO 字段时用 `log_now`（返回 bapiret2）。
 
-双字段形态（msgtx 干净文本 + logid 分离；返回结构追加 `logid TYPE zcl_msgtrace=>tv_log_id` 即 char20，向后兼容）：
+双字段形态（msgtx 干净文本 + logid 分离；返回结构追加 `logid TYPE zcl_msgtrace=>tv_log_id` 即 char32，向后兼容）：
 
 ```abap
 zcl_msgtrace=>log_parts(
     EXPORTING iv_text  = |物料 { lv_matnr } 不存在|
                it_ctx   = VALUE #( ( name = 'MATNR' value = lv_matnr ) )
     IMPORTING ev_text   = ls_return-msgtx    " 干净文本，不带 ID 后缀
-              ev_log_id = ls_return-logid ). " 20 位 ID，独立字段
+              ev_log_id = ls_return-logid ). " 32 位 ID，独立字段
 ```
 
 在 msgty/msgtx 汇合的出口（OData 错误返回 / 表单 / ALV / 接口封装，通常全系统 2~5 处）：

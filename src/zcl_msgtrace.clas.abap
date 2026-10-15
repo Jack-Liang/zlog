@@ -18,8 +18,8 @@ CLASS zcl_msgtrace DEFINITION PUBLIC FINAL CREATE PUBLIC.
   PUBLIC SECTION.
 
     TYPES:
-      " ID 定长 20：BAPIRET2-LOG_NO 仅 char20，22 位 UUID 会静默截断导致下游残缺
-      tv_log_id    TYPE c LENGTH 20,
+      " ID 定长 32（C32 十六进制全长）；BAPIRET2-LOG_NO 仅 char20，ret2 里只装得下前 20 位
+      tv_log_id    TYPE c LENGTH 32,
       tv_save_mode TYPE c LENGTH 1,
       BEGIN OF ty_ctx,
         name  TYPE c LENGTH 30,   " 建议 <= 20，BAL 消息参数名最长 20
@@ -251,8 +251,10 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     ENDIF.
     CLEAR gs_buffer.
     TRY.
-        DATA(lv_uuid) = cl_system_uuid=>if_system_uuid_static~create_uuid_c22( ).
-        gs_buffer-log_id = lv_uuid(20).
+        " C32（32 位大写十六进制）全长使用：可读可粘贴；不用 C22——二进制压缩
+        " 形态不可读，且非法码点过 RFC 边界会被替换成 U+FFFD（乱码的直接原因）
+        DATA(lv_uuid) = cl_system_uuid=>if_system_uuid_static~create_uuid_c32( ).
+        gs_buffer-log_id = lv_uuid(32).
       CATCH cx_uuid_error ##NO_HANDLER.
     ENDTRY.
     IF gs_buffer-log_id IS INITIAL.
@@ -364,7 +366,8 @@ CLASS zcl_msgtrace IMPLEMENTATION.
             WITH ls_ret2-message_v1 ls_ret2-message_v2
                  ls_ret2-message_v3 ls_ret2-message_v4
             INTO ev_text.
-    ev_log_id = ls_ret2-log_no.
+    " LOG_NO 仅 char20 装不下 32 位 ID；log_now 刚保存完，从这里取完整 ID
+    ev_log_id = get_last_id( ).
   ENDMETHOD.
 
 
@@ -606,7 +609,7 @@ CLASS zcl_msgtrace IMPLEMENTATION.
       message_v2 = is_entry-msgv2
       message_v3 = is_entry-msgv3
       message_v4 = is_entry-msgv4
-      log_no     = gs_buffer-log_id
+      log_no     = gs_buffer-log_id   " LOG_NO char20：只承载前 20 位，完整 ID 在 message 后缀
       message    = |{ lv_text } (log { gs_buffer-log_id })| ).
   ENDMETHOD.
 
@@ -725,21 +728,24 @@ CLASS zcl_msgtrace IMPLEMENTATION.
   METHOD save_luw.
     " 随调用方 LUW：依赖调用方后续 COMMIT，ROLLBACK 会连带丢失。
     " 仅建议 TRACE 子对象使用；错误/留痕请用默认独立 LUW 模式
-    DATA lv_handle TYPE balloghndl.
+    DATA: lv_handle    TYPE balloghndl,
+          lv_extnumber TYPE balnrext.
+    lv_extnumber = gs_buffer-log_id.
+
     CALL FUNCTION 'BAL_LOG_CREATE'
       EXPORTING
-        i_s_log = VALUE bal_s_log(
-            object    = c_object
-            subobject = gs_buffer-subobject
-            extnumber = |{ gs_buffer-log_id }|
-            aluser    = gs_buffer-created_by
-            aldate    = gs_buffer-created_on
-            altime    = gs_buffer-created_at
-            aldate_del = gs_buffer-created_on + retention_days( ) ) " D5 保留期
+        i_s_log      = VALUE bal_s_log(
+                 object    = c_object
+                 subobject = gs_buffer-subobject
+                 extnumber = lv_extnumber
+                 aluser    = gs_buffer-created_by
+                 aldate    = gs_buffer-created_on
+                 altime    = gs_buffer-created_at
+                 aldate_del = gs_buffer-created_on + retention_days( ) ) " D5 保留期
       IMPORTING
-        e_log_handle   = lv_handle
+        e_log_handle = lv_handle
       EXCEPTIONS
-        OTHERS         = 1.
+        OTHERS       = 1.
     IF sy-subrc <> 0.
       RETURN.
     ENDIF.
@@ -751,7 +757,7 @@ CLASS zcl_msgtrace IMPLEMENTATION.
       EXPORTING
         i_save_all = abap_true
       EXCEPTIONS
-        OTHERS      = 1.
+        OTHERS     = 1.
     write_snaps_to_db( gs_buffer-log_id ).   " A8 快照随同 LUW 落库
   ENDMETHOD.
 
@@ -760,29 +766,32 @@ CLASS zcl_msgtrace IMPLEMENTATION.
     " RFC 'NONE'：起独立内部会话/独立 LUW 保存，调用方 ROLLBACK 带不走。
     " 传输表打包成 XSTRING 数据簇传参（接口全标量，
     " 与 abapGit 自带远程 FM 的参数风格一致，规避 TABLES 参数）
-    DATA: lt_msgs    TYPE bapirettab,
-          lv_payload TYPE xstring.
+    DATA: lt_msgs     TYPE bapirettab,
+          lv_payload  TYPE xstring,
+          lv_extnumber TYPE balnrext.
 
     build_transport_tables( IMPORTING et_msgs = lt_msgs ).
     EXPORT msgs  = lt_msgs
            snaps = gs_buffer-snaps          " A8 快照（FM 侧同布局类型解开）
            TO DATA BUFFER lv_payload.
 
+    lv_extnumber = gs_buffer-log_id.
+
     CALL FUNCTION 'ZMSGTRACE_SAVE_RFC'
       DESTINATION 'NONE'
       EXPORTING
-        iv_object           = c_object
-        iv_subobject        = gs_buffer-subobject
-        iv_extnumber        = |{ gs_buffer-log_id }|
-        iv_created_by       = gs_buffer-created_by
-        iv_created_on       = gs_buffer-created_on
-        iv_created_at       = gs_buffer-created_at
-        iv_payload          = lv_payload
+        iv_object             = c_object
+        iv_subobject          = gs_buffer-subobject
+        iv_extnumber          = lv_extnumber
+        iv_created_by         = gs_buffer-created_by
+        iv_created_on         = gs_buffer-created_on
+        iv_created_at         = gs_buffer-created_at
+        iv_payload            = lv_payload
       EXCEPTIONS
-        save_failed         = 1
-        system_failure      = 2
+        save_failed           = 1
+        system_failure        = 2
         communication_failure = 3
-        OTHERS              = 4.
+        OTHERS                = 4.
     " 日志组件自身失败不得打断业务流程（静默）。
     " 后续演进：内部错误轨迹（参考 abap-cloud-logger 的 error trail）
   ENDMETHOD.

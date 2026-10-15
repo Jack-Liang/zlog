@@ -39,7 +39,9 @@ CLASS ltcl_msgtrace IMPLEMENTATION.
   METHOD text_ret2_carries_log_id.
     zcl_msgtrace=>begin( ).
     DATA(ls_ret2) = zcl_msgtrace=>text( '物料 4711 不存在' ).
-    cl_abap_unit_assert=>assert_equals( exp = zcl_msgtrace=>get_id( )
+    DATA(lv_id) = zcl_msgtrace=>get_id( ).
+    " LOG_NO 仅 char20：32 位 ID 只承载前 20 位（完整 ID 在 message 后缀 / log_parts）
+    cl_abap_unit_assert=>assert_equals( exp = lv_id(20)
                                         act = ls_ret2-log_no ).
     cl_abap_unit_assert=>assert_true(
         act = xsdbool( ls_ret2-message CS ' (log ' ) ).

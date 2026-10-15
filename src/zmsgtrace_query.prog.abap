@@ -13,7 +13,7 @@ REPORT zmsgtrace_query.
 * ---------------------------------------------------------------------
 
 PARAMETERS:
-  p_id    TYPE c LENGTH 20 LOWER CASE,  " 日志 ID（可粘贴部分，模糊匹配）
+  p_id    TYPE c LENGTH 32 LOWER CASE,  " 日志 ID（可粘贴部分，模糊匹配）
                                         " LOWER CASE 必须：ID 混合大小写，屏幕会强制大写导致永远查不到
   p_sub   TYPE balsubobj,              " 子对象（空=全部）
   p_rows  TYPE i DEFAULT 100.          " 浏览模式最多取多少条日志
@@ -153,7 +153,7 @@ START-OF-SELECTION.
 FORM search_and_display.
 
   TYPES: BEGIN OF ty_out,
-           log_id    TYPE c LENGTH 20,
+           log_id    TYPE c LENGTH 32,
            subobject TYPE balsubobj,
            aluser    TYPE syuname,
            aldate    TYPE sydatum,
@@ -291,7 +291,7 @@ FORM search_and_display.
   " ---- 3) A8 快照行：ZMSGTRACE_CTX 按 log_id 关联，S 级行 + 双击看完整 JSON ----
   DATA lr_id TYPE RANGE OF zmsgtrace_ctx-log_id.
   LOOP AT lt_headers ASSIGNING <ls_hdr>.
-    APPEND VALUE #( sign = 'I' option = 'EQ' low = <ls_hdr>-extnumber(20) )
+    APPEND VALUE #( sign = 'I' option = 'EQ' low = <ls_hdr>-extnumber(32) )
            TO lr_id.
   ENDLOOP.
 

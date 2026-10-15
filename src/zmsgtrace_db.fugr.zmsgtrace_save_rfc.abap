@@ -41,7 +41,7 @@ FUNCTION zmsgtrace_save_rfc.
   LOOP AT lt_snaps INTO DATA(ls_s).
     lv_seq = sy-tabix.
     INSERT zmsgtrace_ctx FROM @( VALUE #(
-        log_id     = iv_extnumber(20)
+        log_id     = iv_extnumber(32)
         seq        = lv_seq
         name       = ls_s-name
         data_str   = ls_s-data_str
