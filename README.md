@@ -22,10 +22,6 @@
 
 **一步导入**：abapGit 拉取本仓库（或 zip 离线导入）。消息类（SE91）与 SLG0 对象/子对象均已随仓库交付（`src/zmsgtrace.msag.xml` + `data/` 目录的 TABU 文件），导入完成即全部就位，无需手工定制。
 
-若 FUGR 导入异常，退回手工方式：SE80/ADT 建函数组 `ZMSGTRACE_DB`，在组内按 `src/zmsgtrace_db.fugr.zmsgtrace_save_rfc.abap` 文件头的接口注释建 RFC 函数 `ZMSGTRACE_SAVE_RFC`（参数全部为标准 DDIC 类型），再粘贴源码；类与程序直接粘贴即可。
-
-仅当 abapGit 版本过旧、`data/` 文件未被导入（症状：SLG1 里查不到对象 ZMSGTRACE）时，手工补两步定制（各 1 分钟）：**SE91** 建消息类 `ZMSGTRACE`，编号 `001`，短文本/长文本均为 `&1&2&3&4`（四个变量无缝拼接，用于自由文本入库）；**SLG0** 建对象 `ZMSGTRACE`（描述随意，如 "消息追溯日志"），子对象 `ERROR`、`AUDIT`、`TRACE`。
-
 **验证**：运行 `ZMSGTRACE_DEMO`，屏幕输出 Log ID；运行 `ZMSGTRACE_QUERY` 粘入任一 ID，应看到消息行 + `at INCL line N/M: <语句摘录>` 追溯行；双击追溯行直接跳到报错源码行（代码改过会自动定位到当前行，状态栏有提示）。SLG1（对象 ZMSGTRACE + 外部编号 = ID）同样可查。
 
 ## API（ZCL_MSGTRACE，全部静态方法）
